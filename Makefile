@@ -1,6 +1,9 @@
 # NGFW Makefile
 # Next-Generation Firewall Build System
-
+#
+# Copyright (C) 2024 NGFW Project
+# Licensed under the GNU General Public License v2
+#
 # Skip dependency inclusion for clean/distclean targets
 ifeq ($(findstring clean,$(MAKECMDGOALS)),clean)
     CLEANING := 1
