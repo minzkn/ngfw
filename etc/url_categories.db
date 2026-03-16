@@ -1,0 +1,304 @@
+# NGFW URL Filter Categories
+# Format: id|category|pattern|action
+# Action: 0=ALLOW, 1=BLOCK, 2=WARN
+
+1|Adult|adult|1
+2|Adult|porn|1
+3|Adult|sex|1
+4|Adult|xxx|1
+5|Adult|nude|1
+6|Adult|gamble|1
+7|Adult|casino|1
+8|Adult|poker|1
+9|Adult|blackjack|1
+10|Adult|roulette|1
+11|Adult|betting|1
+12|Adult|lottery|1
+13|Adult|slots|1
+14|Adult|casino|1
+15|Adult|escort|1
+16|Adult|dating|1
+17|Adult|webcam|1
+18|Adult|escorts|1
+19|Adult|massage|1
+20|Adult|adult|1
+21|Pornography|xxx|1
+22|Pornography|porn|1
+23|Pornography|adult|1
+24|Pornography|teen|1
+25|Pornography|hardcore|1
+26|Pornography|softcore|1
+27|Pornography|milf|1
+28|Pornography|teen|1
+29|Pornography|blonde|1
+30|Pornography|ebony|1
+31|Gambling|casino|1
+32|Gambling|poker|1
+33|Gambling|blackjack|1
+34|Gambling|roulette|1
+35|Gambling|slots|1
+36|Gambling|betting|1
+37|Gambling|lottery|1
+38|Gambling|gamble|1
+39|Gambling|betfair|1
+40|Gambling|williamhill|1
+41|Gambling|888casino|1
+42|Gambling|bodog|1
+43|Gambling|betus|1
+44|Gambling|bet365|1
+45|Gambling|ladbrokes|1
+46|Gaming|gaming|0
+47|Gaming|steampowered|0
+48|Gaming|xbox|0
+49|Gaming|playstation|0
+50|Gaming|nintendo|0
+51|Gaming|blizzard|0
+52|Gaming|riotgames|0
+53|Gaming|epicgames|0
+54|Gaming|origin|0
+55|Gaming|game|0
+56|Gaming|onlinegames|0
+57|Social Media|facebook|0
+58|Social Media|twitter|0
+59|Social Media|instagram|0
+60|Social Media|snapchat|0
+61|Social Media|tiktok|0
+62|Social Media|linkedin|0
+63|Social Media|reddit|0
+64|Social Media|pinterest|0
+65|Social Media|tumblr|0
+66|Social Media|flickr|0
+67|Social Media|whatsapp|0
+68|Social Media|telegram|0
+69|Social Media|discord|0
+70|Social Media|slack|0
+71|Streaming|netflix|0
+72|Streaming|hulu|0
+73|Streaming|disney|0
+74|Streaming|primevideo|0
+75|Streaming|hbo|0
+76|Streaming|spotify|0
+77|Streaming|youtube|0
+78|Streaming|twitch|0
+79|Streaming|twitchtv|0
+80|Streaming|metacafe|0
+81|Streaming|dailymotion|0
+82|Streaming|vimeo|0
+83|Streaming|peertube|0
+84|Streaming|fbcdn|0
+85|News|news|0
+86|News|cnn|0
+87|News|bbc|0
+88|News|reuters|0
+89|News|apnews|0
+90|News|nytimes|0
+91|News|wsj|0
+92|News|washingtonpost|0
+93|News|theguardian|0
+94|News|bloomberg|0
+95|News|forbes|0
+96|News|techcrunch|0
+97|News|verge|0
+98|News|engadget|0
+99|News|mashable|0
+100|News|zdnet|0
+101|Shopping|amazon|0
+102|Shopping|ebay|0
+103|Shopping|alibaba|0
+104|Shopping|aliexpress|0
+105|Shopping|walmart|0
+106|Shopping|target|0
+107|Shopping|bestbuy|0
+108|Shopping|homedepot|0
+109|Shopping|lowes|0
+110|Shopping|etsy|0
+111|Shopping|wish|0
+112|Shopping|shopify|0
+113|Shopping|overstock|0
+114|Shopping|newegg|0
+115|Shopping|tigerdirect|0
+116|Shopping|wayfair|0
+117|Shopping|alibaba|0
+118|Banking|bankofamerica|0
+119|Banking|chase|0
+120|Banking|wellsfargo|0
+121|Banking|citibank|0
+122|Banking|capitalone|0
+123|Banking|usbank|0
+124|Banking|pnc|0
+125|Banking|tdbank|0
+126|Banking|schwab|0
+127|Banking|fidelity|0
+128|Banking|vanguard|0
+129|Banking|etrade|0
+130|Banking|robinhood|0
+131|Banking|paypal|0
+132|Banking|venmo|0
+133|Banking|cashapp|0
+134|Banking|zelle|0
+135|Banking|westernunion|0
+136|Healthcare|webmd|0
+137|Healthcare|mayoclinic|0
+138|Healthcare|clevelandclinic|0
+139|Healthcare|healthline|0
+140|Healthcare|medlineplus|0
+141|Healthcare| nih|0
+142|Healthcare|who|0
+143|Healthcare|cdc|0
+144|Healthcare|fda|0
+145|Healthcare|drugs|0
+146|Healthcare|pharmacy|0
+147|Healthcare|cvs|0
+148|Healthcare|walgreens|0
+149|Healthcare|riteaid|0
+150|Education|mit|0
+151|Education|stanford|0
+152|Education|harvard|0
+153|Education|berkeley|0
+154|Education|coursera|0
+155|Education|udemy|0
+156|Education|edx|0
+157|Education|khanacademy|0
+158|Education|skillshare|0
+159|Education|pluralsight|0
+160|Education|lynda|0
+161|Education|tutorial|0
+162|Education|howto|0
+163|Education|guide|0
+164|Education|learn|0
+165|Education|school|0
+166|Education|university|0
+167|Education|college|0
+168|Government|gov|0
+169|Government|whitehouse|0
+170|Government|congress|0
+171|Government|senate|0
+172|Government|house|0
+173|Government|supremecourt|0
+174|Government|court|0
+175|Government|irs|0
+176|Government|ssa|0
+177|Government|uscis|0
+178|Government|dhs|0
+179|Government|fbi|0
+180|Government|cia|0
+181|Government|nsa|0
+182|Government|doj|0
+183|Email|gmail|0
+184|Email|outlook|0
+185|Email|yahoo|0
+186|Email|aol|0
+187|Email|protonmail|0
+188|Email|zoho|0
+189|Email|yandex|0
+190|Email|fastmail|0
+191|Email|tutanota|0
+192|Email|mail|0
+193|Email|email|0
+194|Email|imap|0
+195|Email|smtp|0
+196|Email|pop3|0
+197|Jobs|linkedin|0
+198|Jobs|indeed|0
+199|Jobs|monster|0
+200|Jobs|careerbuilder|0
+201|Jobs|glassdoor|0
+202|Jobs|simplyhired|0
+203|Jobs|ziprecruiter|0
+204|Jobs|angel|0
+205|Jobs|stackoverflow|0
+206|Jobs|github|0
+207|Jobs|gitlab|0
+208|Jobs|bitbucket|0
+209|Technology|tech|0
+210|Technology|techrepublic|0
+211|Technology|techradar|0
+212|Technology|cnet|0
+213|Technology|pcmag|0
+214|Technology|wired|0
+215|Technology|arstechnica|0
+216|Technology|theverge|0
+217|Technology|engadget|0
+218|Technology|gizmodo|0
+219|Technology|lifehacker|0
+220|Technology|makeuseof|0
+221|Technology|tomshardware|0
+222|Technology|anandtech|0
+223|Technology|extremetech|0
+224|Technology|neowin|0
+225|Technology|windowscentral|0
+226|Technology|androidcentral|0
+227|Technology|macrumors|0
+228|Technology|9to5mac|0
+229|Downloads|sourceforge|0
+230|Downloads|github|0
+231|Downloads|gitlab|0
+232|Downloads|bitbucket|0
+233|Downloads|download|0
+234|Downloads|filehippo|0
+235|Downloads|softpedia|0
+236|Downloads|filehorse|0
+237|Downloads|oldschool|0
+238|Downloads|freeware|0
+239|Downloads|shareware|0
+240|Downloads|cnetdownload|0
+241|File Sharing|dropbox|0
+242|File Sharing|google drive|0
+243|File Sharing|onedrive|0
+244|File Sharing|icloud|0
+245|File Sharing|box|0
+246|File Sharing|mediafire|0
+247|File Sharing|rapidgator|0
+248|File Sharing|zippyshare|0
+249|File Sharing|tinyurl|0
+250|File Sharing|bitly|0
+251|File Sharing|adfly|0
+252|File Sharing|t.co|0
+253|Cloud Storage|dropbox|0
+254|Cloud Storage|google drive|0
+255|Cloud Storage|onedrive|0
+256|Cloud Storage|icloud|0
+257|Cloud Storage|box|0
+258|Cloud Storage|mediafire|0
+259|Cloud Storage|4shared|0
+260|Cloud Storage|yandex.disk|0
+261|Cloud Storage|putlocker|0
+262|Cloud Storage|megaupload|0
+263|Cloud Storage|rapidshare|0
+264|VPN|expressvpn|0
+265|VPN|nordvpn|0
+266|VPN|cyberghost|0
+267|VPN|hotspotshield|0
+268|VPN|tunnelbear|0
+269|VPN|privateinternetaccess|0
+270|VPN|ipvanish|0
+271|VPN|vyprvpn|0
+272|VPN|strongvpn|0
+273|VPN|hide-my-ass|0
+274|VPN|protonvpn|0
+275|VPN|windscribe|0
+276|VPN|mullvad|0
+277|VPN|airvpn|0
+278|VPN|vpn|0
+279|VPN|proxy|0
+280|Proxy|proxy|1
+281|Proxy|hide.me|0
+282|Proxy|kproxy|0
+283|Proxy|hidester|0
+284|Proxy|zoomeye|0
+285|Proxy|shadowsocks|0
+286|Proxy|v2ray|0
+287|Proxy|trojan|0
+288|Proxy|tor|1
+289|Proxy|onion|1
+290|Dating|tinder|0
+291|Dating|match|0
+292|Dating|eharmony|0
+293|Dating|okcupid|0
+294|Dating|plentyoffish|0
+295|Dating|zoosk|0
+296|Dating|coffee|0
+297|Dating|hinge|0
+298|Dating|bumble|0
+299|Dating|grindr|0
+300|Dating|her|0

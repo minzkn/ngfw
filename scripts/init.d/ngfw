@@ -1,0 +1,110 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          ngfw
+# Required-Start:    $local_fs $remote_fs $network
+# Required-Stop:     $local_fs $remote_fs $network
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: NGFW - Next Generation Firewall
+# Description:       Start NGFW daemon for packet filtering and security
+### END INIT INFO
+
+NAME=ngfw
+DAEMON=/usr/sbin/$NAME
+PIDFILE=/var/run/$NAME.pid
+CONF=/etc/ngfw/ngfw.conf
+LOGFILE=/var/log/ngfw.log
+
+[ -x "$DAEMON" ] || exit 0
+
+. /lib/lsb/init-functions
+
+start_daemon() {
+    log_daemon_msg "Starting $NAME daemon"
+    
+    if [ -f $PIDFILE ]; then
+        if kill -0 $(cat $PIDFILE) 2>/dev/null; then
+            log_success_msg "$NAME already running"
+            return 0
+        else
+            rm -f $PIDFILE
+        fi
+    fi
+    
+    start-stop-daemon -S -b -m -p $PIDFILE -x $DAEMON -- -c $CONF -d
+    
+    if [ $? -eq 0 ]; then
+        log_success_msg "$NAME started"
+    else
+        log_failure_msg "Failed to start $NAME"
+        return 1
+    fi
+}
+
+stop_daemon() {
+    log_daemon_msg "Stopping $NAME daemon"
+    
+    if [ ! -f $PIDFILE ]; then
+        log_success_msg "$NAME not running"
+        return 0
+    fi
+    
+    start-stop-daemon -K -p $PIDFILE -x $DAEMON
+    rm -f $PIDFILE
+    
+    log_success_msg "$NAME stopped"
+}
+
+reload_daemon() {
+    log_daemon_msg "Reloading $NAME configuration"
+    
+    if [ ! -f $PIDFILE ]; then
+        log_failure_msg "$NAME not running"
+        return 1
+    fi
+    
+    kill -HUP $(cat $PIDFILE)
+    
+    log_success_msg "$NAME configuration reloaded"
+}
+
+status_daemon() {
+    if [ ! -f $PIDFILE ]; then
+        echo "$NAME is not running"
+        return 3
+    fi
+    
+    if kill -0 $(cat $PIDFILE) 2>/dev/null; then
+        echo "$NAME is running (pid $(cat $PIDFILE))"
+        return 0
+    else
+        echo "$NAME is not running but pidfile exists"
+        return 1
+    fi
+}
+
+case "$1" in
+    start)
+        start_daemon
+        ;;
+    stop)
+        stop_daemon
+        ;;
+    reload)
+        reload_daemon
+        ;;
+    restart)
+        stop_daemon
+        sleep 1
+        start_daemon
+        ;;
+    status)
+        status_daemon
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|reload|restart|status}"
+        exit 1
+        ;;
+esac
+
+exit $?

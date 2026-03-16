@@ -1,0 +1,25 @@
+[Unit]
+Description=NGFW - Next Generation Firewall
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/sbin/ngfw -d -c /etc/ngfw/ngfw.conf -l /var/log/ngfw.log
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+PrivateTmp=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/log /var/run /etc/ngfw
+
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_SYS_MODULE
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

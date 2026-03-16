@@ -1,0 +1,505 @@
+# NGFW IPS Signatures Database
+# Format: id|name|pattern|severity|classification
+# Severity: 1=LOW, 2=MEDIUM, 3=HIGH, 4=CRITICAL
+# Classification: 0=UNKNOWN, 1=MALWARE, 2=EXPLOIT, 3=SCAN, 4=DOS, 5=INTRUSION, 6=WORM, 7=TROJAN, 8=BACKDOOR, 9=RANSOMWARE
+
+1|SQL Injection - UNION SELECT|union.*select|4|2
+2|SQL Injection - OR 1=1|.*or.*1.*=.*1|4|2
+3|SQL Injection - AND 1=1|.*and.*1.*=.*1|4|2
+4|SQL Injection - Comment|--+.*$|4|2
+5|SQL Injection - DROP TABLE|drop.*table|4|2
+6|SQL Injection - INSERT|insert.*into|3|2
+7|SQL Injection - UPDATE|update.*set|3|2
+8|SQL Injection - DELETE|delete.*from|3|2
+9|SQL Injection - xp_cmdshell|xp_cmdshell|4|8
+10|SQL Injection - sp_executesql|sp_executesql|3|2
+11|XSS - Script Tag|<script|4|2
+12|XSS - JavaScript Event|onerror=|4|2
+13|XSS - onload|onload=|4|2
+14|XSS - onmouseover|onmouseover|3|2
+15|XSS - iframe|<iframe|3|2
+16|XSS - object|<object|3|2
+17|XSS - embed|<embed|3|2
+18|XSS - base64|base64|3|2
+19|XSS - data: URL|data:text/html|3|2
+20|Command Injection - ls|.*\|.*ls|4|2
+21|Command Injection - cat|.*\|.*cat|4|2
+22|Command Injection - wget|.*\|.*wget|4|2
+23|Command Injection - curl|.*\|.*curl|4|2
+24|Command Injection - nc|.*\|.*nc|4|8
+25|Command Injection - bash|.*\|.*bash|4|2
+26|Command Injection - sh|.*\|.*sh|4|2
+27|Command Injection - exec|.*exec.*\(|4|2
+28|Command Injection - system|.*system.*\(|4|2
+29|Path Traversal - ../|\.\./|3|2
+30|Path Traversal - ..\\|\.\.\\|3|2
+31|Path Traversal - /etc/passwd|/etc/passwd|3|2
+32|Path Traversal - /etc/shadow|/etc/shadow|4|2
+33|Path Traversal - Windows Boot|\.\..*boot\.ini|3|2
+34|Path Traversal - UNC Path|\\\\.*\\.*|3|2
+35|RFI - http://|http://|3|2
+36|RFI - https://|https://|3|2
+37|LFI - /proc/self|/proc/self|3|2
+38|LFI - /etc/hosts|/etc/hosts|3|2
+39|LFI - /proc/environ|/proc/environ|3|2
+40|LFI - /proc/cmdline|/proc/cmdline|3|2
+41|SSRF - http://|ssrf.*http://|4|2
+42|XXE - <!DOCTYPE|<!DOCTYPE|4|2
+43|XXE - <!ENTITY|<!ENTITY|4|2
+44|XXE - SYSTEM|system.*public|4|2
+45|CSRF Token Missing|no.*csrf|2|5
+46|Session Fixation|session.*fixation|3|5
+47|Weak Cipher - SSLv2|SSLv2|2|5
+48|Weak Cipher - SSLv3|SSLv3|2|5
+49|Weak Cipher - TLS 1.0|TLSv1\.0|2|5
+50|Weak Cipher - TLS 1.1|TLSv1\.1|2|5
+51|Heartbleed|.*heartbeat|4|2
+52|POODLE|POODLE|4|2
+53|Logjam|Logjam|4|2
+54|FREAK|FREAK|4|2
+55|BEAST|BEAST|4|2
+56|Shellshock|.*\(\).*:|4|2
+57|Shellshock - env|env.*=.*\(|4|2
+58|Shellshock - HTTP|HTTP.*\(.*\)|4|2
+59|Null Byte Injection|%00|3|2
+60|Double URL Encode|%252f|3|2
+61|UTF-8 Encoding|%C0%AE|3|2
+62|SQL Wildcard Attack|%|3|3
+63|HTTP Flood|GET.*1000/second|4|4
+64|SYN Flood|.*SYN.*flood|4|4
+65|UDP Flood|.*UDP.*flood|4|4
+66|ICMP Flood|.*ICMP.*flood|4|4
+67|DNS Amplification|.*DNS.*amplification|4|4
+68|NTP Amplification|.*NTP.*monlist|4|4
+69|SSDP Amplification|.*SSDP.*M-SEARCH|4|4
+70|SNMP Amplification|.*SNMP.*getbulk|4|4
+71|CHARGEN Amplification|.*CHARGEN|4|4
+72|Port Scan - SYN|SYN.*FIN|2|3
+73|Port Scan - XMAS|XMAS.*FIN|2|3
+74|Port Scan - NULL|NULL.*flags|2|3
+75|Port Scan - FIN|FIN.*scan|2|3
+76|Port Scan - ACK|ACK.*scan|2|3
+77|Ping of Death|frag.*offset|4|2
+78|Land Attack|src.*eq.*dst|4|2
+79|Teardrop|frag.*overlap|4|2
+80|Smurf Attack|broadcast.*ping|4|4
+81|Bonk Attack|bonk|4|4
+82|Jolt2 Attack|jolt2|4|4
+83|Ping Flood|ping.*flood|4|4
+84|Accelerated|accelerated|4|2
+85|TCP Reassembly|reassembly.*error|3|2
+86|IPv6 Fragmentation|ipv6.*fragment|3|2
+87|Hop-by-Hop Options|hop.by|2|2
+88|Routing Header|routing.*header|3|2
+89|Source Routing|source.*routing|3|2
+90|Record Route|record.*route|2|2
+91|Timestamp|timestamp|1|2
+92|IP Spoofing|ip.*spoof|3|5
+93|TTL Expiry|ttl.*expire|2|3
+94|TCP Sequence Predictable|predictable.*tcp|3|5
+95|ARP Spoofing|arp.*spoof|4|5
+96|MAC Flooding|mac.*flood|3|5
+97|VLAN Hopping|vlan.*hop|4|5
+98|DHCP Starvation|dhcp.*starvation|4|5
+99|Rogue DHCP|rogue.*dhcp|4|5
+100|SSH Brute Force|.*ssh.*failed.*login|3|5
+101|FTP Brute Force|.*ftp.*530.*failed|3|5
+102|Telnet Brute Force|.*telnet.*failed|3|5
+103|HTTP Brute Force|.*http.*401|3|5
+104|POP3 Brute Force|.*pop3.*failed|3|5
+105|IMAP Brute Force|.*imap.*failed|3|5
+106|SMTP Brute Force|.*smtp.*failed|3|5
+107|RDP Brute Force|.*rdp.*failed|3|5
+108|SMB Brute Force|.*smb.*failed|3|5
+109|MySQL Brute Force|.*mysql.*failed|3|5
+110|PostgreSQL Brute Force|.*postgres.*failed|3|5
+111|MongoDB Brute Force|.*mongodb.*failed|3|5
+112|Redis Brute Force|.*redis.*failed|3|5
+113|VNC Brute Force|.*vnc.*failed|3|5
+114|Database Login|.*database.*login|3|5
+115|Webshell Upload|.*upload.*php|4|8
+116|Webshell - c99|c99\.php|4|8
+117|Webshell - r57|r57\.php|4|8
+118|Webshell - WebShell|webshell|4|8
+119|ASPX Shell|aspx.*shell|4|8
+120|JSP Shell|jsp.*shell|4|8
+121|CGI Shell|cgi.*shell|4|8
+122|Backdoor - NetCat|nc.*-e|4|8
+123|Backdoor - Bind Shell|bind.*shell|4|8
+124|Backdoor - Reverse Shell|reverse.*shell|4|8
+125|Trojan - Generic|win32.*trojan|4|7
+126|Trojan - Zeus|Zeus|4|7
+127|Trojan - Emotet|Emotet|4|7
+128|Trojan - TrickBot|TrickBot|4|7
+129|Trojan - IcedID|IcedID|4|7
+130|Trojan - Qakbot|Qakbot|4|7
+131|Ransomware - Generic|ransomware|4|9
+132|Ransomware - WannaCry|WannaCry|4|9
+133|Ransomware - NotPetya|NotPetya|4|9
+134|Ransomware - Bad Rabbit|BadRabbit|4|9
+135|Ransomware - Locky|Locky|4|9
+136|Ransomware - Cerber|Cerber|4|9
+137|Ransomware - Ryuk|Ryuk|4|9
+138|Ransomware - Maze|Maze|4|9
+139|Ransomware - REvil|REvil|4|9
+140|Ransomware - DarkSide|DarkSide|4|9
+141|Worm - Conficker|Conficker|4|6
+142|Worm - SQL Slammer|SQLSlammer|4|6
+143|Worm - Code Red|CodeRed|4|6
+144|Worm - Nimda|Nimda|4|6
+145|Worm - Blaster|Blaster|4|6
+146|Worm - Sasser|Sasser|4|6
+147|Worm - Mydoom|Mydoom|4|6
+148|Worm - Bagle|Bagle|4|6
+149|Worm - WannyCry|WannyCry|4|6
+150|Keylogger - Generic|keylogger|4|8
+151|Rootkit - Generic|rootkit|4|8
+152|Rootkit - LKM|LKM.*rootkit|4|8
+153|Rootkit - User Mode|user.*mode.*rootkit|4|8
+154|Adware - Generic|adware|2|5
+155|Adware - Browser Hijack|browser.*hijack|2|5
+156|Spyware - Generic|spyware|3|5
+157|PUA - Generic|potentially.*unwanted|2|5
+158|Botnet - C&C|command.*control|4|5
+159|Botnet - IRC Bot|irc.*bot|4|6
+160|Botnet - HTTP Bot|http.*bot|4|6
+161|APT - Activity|apt.*activity|4|5
+162|Zero Day Exploit|0day|4|2
+163|Exploit Kit - Generic|exploit.*kit|4|2
+164|Exploit Kit - Angler|Angler|4|2
+165|Exploit Kit - Nuclear|Nuclear|4|2
+166|Flash Exploit|flash.*exploit|4|2
+167|Java Exploit|java.*exploit|4|2
+168|Silverlight Exploit|silverlight.*exploit|4|2
+169|Word Exploit|word.*exploit|4|2
+170|Excel Exploit|excel.*exploit|4|2
+171|PDF Exploit|pdf.*exploit|4|2
+172|IE Exploit|ie.*exploit|4|2
+173|Edge Exploit|edge.*exploit|4|2
+174|Chrome Exploit|chrome.*exploit|4|2
+175|Firefox Exploit|firefox.*exploit|4|2
+176|Safari Exploit|safari.*exploit|4|2
+177|Android Exploit|android.*exploit|4|2
+178|iOS Exploit|ios.*exploit|4|2
+179|Privilege Escalation|privilege.*escalation|4|5
+180|Buffer Overflow|buffer.*overflow|4|2
+181|Format String|format.*string|4|2
+182|Integer Overflow|integer.*overflow|4|2
+183|Heap Overflow|heap.*overflow|4|2
+184|Stack Overflow|stack.*overflow|4|2
+185|Use After Free|use.*after.*free|4|2
+186|Double Free|double.*free|4|2
+187|Race Condition|race.*condition|4|2
+188|TOCTOU|time.*check.*time.*use|4|2
+189|Directory Listing|directory.*listing|1|3
+190|Default Page|/index\.html.*apache|1|3
+191|Information Disclosure|/phpinfo|2|5
+192|Information Disclosure|/server-status|2|5
+193|Information Disclosure|/server-info|2|5
+194|Information Disclosure|\.git/|2|5
+195|Information Disclosure|\.svn/|2|5
+196|Information Disclosure|\.env|2|5
+197|Information Disclosure|\.htaccess|2|5
+198|Information Disclosure|\.DS_Store|2|5
+199|Information Disclosure|robots\.txt|1|3
+200|Warning - Sensitive Data|sensitive.*data|3|5
+201|Credentials in URL|username.*password.*url|3|5
+202|HTTP Basic Auth|basic.*auth|2|3
+203|HTTP Digest Auth|digest.*auth|2|3
+204|WWW-Authenticate|www-authenticate|2|3
+205|Authorization Header|authorization.*header|2|5
+206|Cookie Theft|cookie.*theft|4|5
+207|Session Hijacking|session.*hijack|4|5
+208|Session Prediction|session.*predict|3|5
+209|Insecure Cookie|set-cookie.*secure|2|5
+210|HTTP Only Cookie|http.*only|2|5
+211|SameSite Cookie|samesite|2|5
+212|Cross-Site Request Forgery|csrf.*token|3|2
+213|Missing Security Header|X-Frame-Options|2|5
+214|Missing Security Header|X-Content-Type-Options|2|5
+215|Missing Security Header|Strict-Transport-Security|2|5
+216|Missing Security Header|Content-Security-Policy|2|5
+217|Missing Security Header|X-XSS-Protection|2|5
+218|HTTP Verb Tampering|OPTIONS.*method|3|3
+219|HTTP Method Override|_method|3|2
+220|HTTP Header Injection|\r\n.*location|3|2
+221|Open Redirect|redirect.*url|3|2
+222|XML Injection|xml.*injection|3|2
+223|JSON Injection|json.*injection|3|2
+224|LDAP Injection|ldap.*injection|4|2
+225|XPath Injection|xpath.*injection|4|2
+226|NoSQL Injection|nosql.*injection|4|2
+227|HTP Request Smuggling|request.*smuggling|4|2
+228|HTTP Response Splitting|response.*splitting|4|2
+229|Web Cache Poisoning|cache.*poison|3|2
+230|Denial of Service - Apache|apache.*dos|4|4
+231|Denial of Service - IIS|iis.*dos|4|4
+232|Slowloris Attack|slowloris|4|4
+233|Slow POST Attack|slow.*post|4|4
+234|Slow Read Attack|slow.*read|4|4
+235|R-U-Dead-Yet|R-U-Dead-Yet|4|4
+236|HashDoS|hash.*dos|4|4
+237|XML Bomb|billion.*laughs|4|4
+238|Quadratic Blowup|quadratic.*blowup|4|4
+239|Regular Expression DOS|regex.*dos|4|4
+240|Cloudflare Breach|cloudflare.*breach|4|5
+241|LinkedIn Breach|linkedin.*breach|4|5
+242|Adobe Breach|adobe.*breach|4|5
+243|LinkedIn Scraping|linkedin.*scraping|3|3
+244|Email Harvesting|email.*harvest|3|3
+245|Web Scraping|web.*scraping|2|3
+246|Content Scraping|content.*scrap|2|3
+247|API Abuse|api.*abuse|3|3
+248|Rate Limit Exceeded|rate.*limit.*exceed|3|4
+249|Concurrent Connections|too.*many.*connections|3|4
+250|File Enumeration|file.*enumeration|2|3
+251|Directory Brute Force|directory.*brute|3|3
+252|Backup File|backup.*file|2|5
+253|Old File|old.*file|2|5
+254|Temp File|temp.*file|2|3
+255|Source Code Leak|source.*code.*leak|4|5
+256|Config File|config.*file|3|5
+257|Log File Leak|log.*file.*leak|3|5
+258|Password File|passwd.*file|4|5
+259|Private Key Leak|private.*key.*leak|4|5
+260|Certificate Leak|certificate.*leak|4|5
+261|Database Dump|database.*dump|4|5
+262|Memory Dump|memory.*dump|4|5
+263|Core Dump|core.*dump|4|5
+264|Wireless - WEP|wep.*encryption|3|5
+265|Wireless - WPA|wpa.*weak|3|5
+266|Wireless - Evil Twin|evil.*twin|4|5
+267|Wireless - Rogue AP|rogue.*ap|4|5
+268|Bluetooth Exploit|bluetooth.*exploit|3|2
+269|NFC Exploit|nfc.*exploit|3|2
+270|Voice Call Intercept|call.*intercept|4|5
+271|SMS Intercept|sms.*intercept|4|5
+272|IM Intercept|im.*intercept|4|5
+273|VPN Leak|vpn.*leak|3|5
+274|DNS Leak|dns.*leak|3|5
+275|WebRTC Leak|webrtc.*leak|3|5
+276|IPv6 Attack|ipv6.*attack|3|2
+277|Neighbor Discovery|neighbor.*discovery|3|3
+278|MLD Attack|mld.*attack|3|4
+279|RA Attack|router.*advertisement.*attack|4|5
+280|DHCPv6 Attack|dhcpv6.*attack|4|5
+281|FTP Bounce|ftp.*bounce|3|3
+282|FTP Anonymous|ftp.*anonymous|2|3
+283|TFTP Access|tftp.*access|3|5
+284|SMB Signing|s mb.*signing|3|3
+285|SMBv1|smb1|3|5
+286|NetBIOS Attack|netbios.*attack|3|3
+287|LDAP Attack|ldap.*attack|3|3
+288|RADIUS Attack|radius.*attack|3|3
+289|SNMPv1v2|snmp.*v1.*v2|3|5
+290|SNMP Community|snmp.*community|3|5
+291|IMAP Attack|imap.*attack|3|3
+292|POP3 Attack|pop3.*attack|3|3
+293|SMTP Open Relay|smtp.*relay|3|5
+294|SMTP Virality|smtp.*virus|4|6
+295|DNS Poisoning|dns.*poison|4|5
+296|DNS Tunneling|dns.*tunnel|4|5
+297|DNS Zone Transfer|dns.*zone.*transfer|3|3
+298|DNSSEC Bypass|dnssec.*bypass|4|5
+299|NTP Server|ntserver|3|3
+300|Time Sync Attack|time.*sync.*attack|3|3
+301|Kerberos Attack|kerberos.*attack|4|5
+302|NTLM Relay|ntlm.*relay|4|5
+303|Pass the Hash|pass.*hash|4|5
+304|Pass the Ticket|pass.*ticket|4|5
+305|Golden Ticket|golden.*ticket|4|5
+306|Silver Ticket|silver.*ticket|4|5
+307|DCSync Attack|dcsync|4|5
+308|DCShadow Attack|dcshadow|4|5
+309|Mimikatz|mimikatz|4|8
+310|WCE|wce|4|8
+311|Gsecdump|gsecdump|4|8
+312|fgdump|fgdump|4|8
+313|Metasploit Payload|metasploit.*payload|4|8
+314|Metasploit Shell|metasploit.*shell|4|8
+315|Meterpreter|meterpreter|4|8
+316|Cobalt Strike|cobalt.*strike|4|8
+317|PowerShell Empire|powerShell.*empire|4|8
+318|Covenant|covenant|4|8
+319|Sliver|sliver|4|8
+320|PoshC2|poshc2|4|8
+321|Faction C2|faction.*c2|4|8
+322|Beacon|beacon|4|8
+323|Shellcode|shellcode|4|8
+324|Egghunter|egghunter|4|8
+325|Hollow|Hollow|4|8
+326|Process Injection|process.*injection|4|8
+327|DLL Injection|dll.*injection|4|8
+328|Reflective DLL|reflective.*dll|4|8
+329|PE Injection|pe.*injection|4|8
+330|Process Hollowing|process.*hollowing|4|8
+331|Atom Bombing|atom.*bombing|4|8
+332|Ghost Writing|ghost.*writing|4|8
+333|Early Bird|early.*bird|4|8
+334|Propagate|propagate|4|6
+335|Timestomp|timestomp|4|8
+336|Alternate Data Streams|alt.*data.*stream|3|8
+337|Hide in Registry|hide.*registry|4|8
+338|Hide in Service|hide.*service|4|8
+339|Hide in Driver|hide.*driver|4|8
+340|Inline Hooking|inline.*hook|4|8
+341|IAT Hooking|iat.*hooking|4|8
+342|EAT Hooking|eat.*hooking|4|8
+343|SSDT Hook|ssdt.*hook|4|8
+344|IDT Hook|idt.*hook|4|8
+345|IRP Hook|irp.*hook|4|8
+346|MBR Rootkit|mbr.*rootkit|4|8
+347|Bootkit|bootkit|4|8
+348|Firmware Rootkit|firmware.*rootkit|4|8
+349|UEFI Rootkit|uefi.*rootkit|4|8
+350|Hypervisor Rootkit|hypervisor.*rootkit|4|8
+351|Keylogger - User Mode|user.*mode.*keylog|4|8
+352|Keylogger - Kernel Mode|kernel.*mode.*keylog|4|8
+353|Keylogger - Hardware|hardware.*keylog|4|8
+354|Keylogger - Network|network.*keylog|4|8
+355|Screenshot Capture|screenshot.*capture|4|8
+356|Audio Capture|audio.*capture|4|8
+357|Video Capture|video.*capture|4|8
+358|Webcam Capture|webcam.*capture|4|8
+359|Microphone Capture|microphone.*capture|4|8
+360|Mouse Capture|mouse.*capture|4|8
+361|Cryptominer|cryptominer|4|8
+362|Monero Miner|monero.*miner|4|8
+363|Bitcoin Miner|bitcoin.*miner|4|8
+364|CoinHive|coinhive|3|5
+365|CoinHive Alternative|coin-hive|3|5
+366|JSEcoin|jsecoin|3|5
+367|CryptoJacking|cryptojacking|3|5
+368|Browser Injection|browser.*injection|3|5
+369|Man in the Browser|mitb|4|5
+370|Man in the Middle|mitm|4|5
+371|ARP Poisoning|arp.*poison|4|5
+372|SSL Stripping|ssl.*strip|4|5
+373|SSL Sniffing|ssl.*sniff|4|5
+374|Certificate Spoofing|certificate.*spoof|4|5
+375|Java Signed Applet|java.*signed|3|2
+376|ActiveX Exploit|activex.*exploit|4|2
+377|Buffer Overflow - Stack|stack.*buffer.*overflow|4|2
+378|Buffer Overflow - Heap|heap.*buffer.*overflow|4|2
+379|Heap Spray|heap.*spray|4|2
+380|DEP Bypass|dep.*bypass|4|2
+381|ASLR Bypass|aslr.*bypass|4|2
+382|SEH Overflow|seh.*overflow|4|2
+383|RET Overflow|ret.*overflow|4|2
+384|JOP Chain|jop.*chain|4|2
+385|COP Chain|cop.*chain|4|2
+386|Rop Chain|rop.*chain|4|2
+387|SROP|srop|4|2
+388|BOP|bop|4|2
+389|Stack Pivoting|stack.*pivot|4|2
+390|Write What Where|write.*what.*where|4|2
+391|Information Gathering|information.*gather|1|3
+392|Footprinting|footprinting|1|3
+393|Fingerprinting|fingerprinting|1|3
+394|Port Scan|port.*scan|2|3
+395|Vulnerability Scan|vulnerability.*scan|2|3
+396|Web Application Scan|web.*app.*scan|2|3
+397|CMS Detection|cms.*detect|1|3
+398|Wpconfig|wp-config|3|5
+399|Wp-Login|wp-login|2|3
+400|Xmlrpc|xmlrpc|2|3
+401|WooCommerce|woocommerce|1|3
+402|Joomla Config|joomla.*config|3|5
+403|Drupal Config|drupal.*config|3|5
+404|Magento Config|magento.*config|3|5
+405|ThinkPHP|thinkphp|3|2
+406|Struts|struts|4|2
+407|Spring Framework|spring.*framework|3|2
+408|JBoss|jboss|3|2
+409|WebLogic|weblogic|3|2
+410|WebSphere|websphere|3|2
+411|Tomcat|tomcat|2|3
+412|GlassFish|glassfish|2|3
+413|Jetty|jetty|2|3
+414|Nginx|Nginx|1|3
+415|Apache|Apache|1|3
+416|IIS|IIS|1|3
+417|Lighttpd|lighttpd|1|3
+418|OpenSSL|openssl|2|3
+419|LibSSL|libssl|2|3
+420|OpenSSH|openssh|1|3
+421|ProFTPD|proftpd|2|3
+422|vsftpd|vsftpd|2|3
+423|Pure-FTPd|pure-ftpd|2|3
+424|MySQL|MySQL|1|3
+425|PostgreSQL|PostgreSQL|1|3
+426|MongoDB|MongoDB|1|3
+427|Redis|Redis|2|3
+428|Elasticsearch|Elasticsearch|2|3
+429|Cassandra|Cassandra|2|3
+430|ZooKeeper|ZooKeeper|2|3
+431|RabbitMQ|RabbitMQ|2|3
+432|Kafka|Kafka|2|3
+433|CouchDB|CouchDB|2|3
+434|InfluxDB|InfluxDB|2|3
+435|Etcd|etcd|3|5
+436|Zabbix|Zabbix|2|3
+437|Prometheus|Prometheus|2|3
+438|Grafana|Grafana|2|3
+439|Kibana|Kibana|2|3
+440|Wordpress|Wordpress|1|3
+441|Joomla|Joomla|1|3
+442|Drupal|Drupal|1|3
+443|Magento|Magento|1|3
+444|Django|Django|1|3
+445|Flask|Flask|1|3
+446|Rails|Rails|1|3
+447|Laravel|Laravel|1|3
+448|Symfony|Symfony|1|3
+449|CakePHP|cakephp|1|3
+450|CodeIgniter|codeigniter|1|3
+451|Yii|Yii|1|3
+452|Phalcon|phalcon|1|3
+453|Slim|Slim|1|3
+454|Lumen|Lumen|1|3
+455|Swoole|Swoole|1|3
+456|Express|express|1|3
+457|Koa|Koa|1|3
+458|NestJS|nestjs|1|3
+459|FastAPI|fastapi|1|3
+460|Flask-RESTful|flask-restful|1|3
+461|Tornado|Tornado|1|3
+462|Pyramid|Pyramid|1|3
+463|Bottle|Bottle|1|3
+464|CherryPy|cherrypy|1|3
+465|Web2py|web2py|1|3
+466|Falcon|Falcon|1|3
+467|Responder|responder|4|8
+468|LLMNR Poisoning|llmnr.*poison|4|5
+469|NBT-NS Poisoning|nbtscan|4|5
+470|WPAD Poisoning|wpad.*poison|4|5
+471|Multicast DNS|mdns.*poison|4|5
+472|Internal IP Disclosure|internal.*ip.*disclose|2|5
+473|External IP Disclosure|external.*ip.*disclose|2|5
+474|Internal Hostname|internal.*hostname|2|5
+475|Username Enumeration|username.*enumeration|2|3
+476|Password Reset|pass.*reset|2|3
+477|Password Change|pass.*change|2|3
+478|Account Lockout|account.*lockout|2|3
+479|Multiple Failed Logins|multiple.*failed.*login|2|3
+480|Suspicious User Agent|suspicious.*user.*agent|2|3
+481|Bot Detection|bot.*detection|2|3
+482|Scanner Detection|scanner.*detection|2|3
+483|Automation Tool|automation.*tool|2|3
+484|Curl Detection|curl.*detection|2|3
+485|Wget Detection|wget.*detection|2|3
+486|Python Request|python.*requests|2|3
+487|Go Request|go.*http|2|3
+488|Node Request|node.*http|2|3
+489|Ruby Net HTTP|ruby.*net.*http|2|3
+490|Java HTTP|java.*http|2|3
+491|C# HTTP|c#.*http|2|3
+492|PHP cURL|php.*curl|2|3
+493|WinHTTP|winhttp|2|3
+494|WinINet|wininet|2|3
+495|libcurl|libcurl|2|3
+496|OkHttp|okhttp|2|3
+497|Retrofit|retrofit|2|3
+498|RestSharp|restsharp|2|3
+499|Unirest|unirest|2|3
+500|Axios|axios|2|3

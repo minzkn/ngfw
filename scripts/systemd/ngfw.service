@@ -1,0 +1,26 @@
+[Unit]
+Description=NGFW - Next Generation Firewall
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/sbin/ngfw -c /etc/ngfw/ngfw.conf -d
+ExecStop=/bin/kill -TERM $MAINPID
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=10
+User=root
+Group=root
+
+StandardOutput=journal
+StandardError=journal
+
+PrivateTmp=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/log /var/run /etc/ngfw
+
+[Install]
+WantedBy=multi-user.target
