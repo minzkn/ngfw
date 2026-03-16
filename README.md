@@ -239,7 +239,7 @@ aes_cbc_encrypt(&ctx, iv, plaintext, ciphertext, 16);
 
 ## 라이선스
 
-MIT License
+GNU GENERAL PUBLIC LICENSE Version 2, June 1991
 
 ## 기여
 
