@@ -163,7 +163,7 @@ ngfw_ret_t capture_start(capture_t *capture)
 
     struct ifreq ifr;
     memset(&ifr, 0, sizeof(ifr));
-    strncpy(ifr.ifr_name, capture->interface_name, IFNAMSIZ - 1);
+    snprintf(ifr.ifr_name, sizeof(ifr.ifr_name), "%.15s", capture->interface_name);
     ifr.ifr_name[IFNAMSIZ - 1] = '\0';
 
     if (ioctl(capture->socket_fd, SIOCGIFINDEX, &ifr) < 0) {

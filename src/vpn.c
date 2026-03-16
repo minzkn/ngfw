@@ -145,12 +145,12 @@ ngfw_ret_t vpn_tunnel_create(vpn_t *vpn, vpn_tunnel_t *config, vpn_tunnel_t **tu
     memset(t, 0, sizeof(vpn_tunnel_t));
 
     t->id = config->id;
-    strncpy(t->name, config->name, sizeof(t->name) - 1);
+    snprintf(t->name, sizeof(t->name), "%s", config->name);
     t->type = vpn->type;
-    strncpy(t->local_addr, config->local_addr, sizeof(t->local_addr) - 1);
-    strncpy(t->remote_addr, config->remote_addr, sizeof(t->remote_addr) - 1);
-    strncpy(t->local_net, config->local_net, sizeof(t->local_net) - 1);
-    strncpy(t->remote_net, config->remote_net, sizeof(t->remote_net) - 1);
+    snprintf(t->local_addr, sizeof(t->local_addr), "%s", config->local_addr);
+    snprintf(t->remote_addr, sizeof(t->remote_addr), "%s", config->remote_addr);
+    snprintf(t->local_net, sizeof(t->local_net), "%s", config->local_net);
+    snprintf(t->remote_net, sizeof(t->remote_net), "%s", config->remote_net);
 
     t->created = get_ms_time();
     t->established = false;
@@ -189,8 +189,8 @@ static ngfw_ret_t ike_exchange(vpn_t *vpn, vpn_tunnel_t *tunnel)
     memset(tunnel->ike, 0, sizeof(ike_session_t));
 
     tunnel->ike->id = tunnel->id;
-    strncpy(tunnel->ike->local_addr, tunnel->local_addr, sizeof(tunnel->ike->local_addr) - 1);
-    strncpy(tunnel->ike->remote_addr, tunnel->remote_addr, sizeof(tunnel->ike->remote_addr) - 1);
+    snprintf(tunnel->ike->local_addr, sizeof(tunnel->ike->local_addr), "%s", tunnel->local_addr);
+    snprintf(tunnel->ike->remote_addr, sizeof(tunnel->ike->remote_addr), "%s", tunnel->remote_addr);
     tunnel->ike->local_port = 500;
     tunnel->ike->remote_port = 500;
     tunnel->ike->state = IKE_STATE_INIT;

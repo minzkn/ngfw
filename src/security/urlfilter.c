@@ -252,8 +252,7 @@ ngfw_ret_t urlfilter_load_blocklist(urlfilter_t *filter, const char *filename)
         
         url_rule_t rule = {0};
         rule.id = rule_id++;
-        strncpy(rule.pattern, line, sizeof(rule.pattern) - 1);
-        rule.pattern[sizeof(rule.pattern) - 1] = '\0';
+        snprintf(rule.pattern, sizeof(rule.pattern), "%s", line);
         rule.category = URL_CATEGORY_MALWARE;
         rule.allow = false;
         rule.enabled = true;
@@ -294,8 +293,7 @@ ngfw_ret_t urlfilter_load_categories(urlfilter_t *filter, const char *filename)
         
         dns_rule_t rule = {0};
         rule.id = loaded + 1;
-        strncpy(rule.domain, line, sizeof(rule.domain) - 1);
-        rule.domain[sizeof(rule.domain) - 1] = '\0';
+        snprintf(rule.domain, sizeof(rule.domain), "%.255s", line);
         rule.category = category;
         rule.block = true;
         rule.enabled = true;
@@ -339,8 +337,7 @@ ngfw_ret_t urlfilter_load_db(urlfilter_t *filter, const char *filename)
 
         url_rule_t rule = {0};
         rule.id = loaded + 1;
-        strncpy(rule.pattern, line, sizeof(rule.pattern) - 1);
-        rule.pattern[sizeof(rule.pattern) - 1] = '\0';
+        snprintf(rule.pattern, sizeof(rule.pattern), "%.255s", line);
         rule.category = category;
         rule.allow = false;
         rule.enabled = true;

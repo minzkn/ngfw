@@ -29,7 +29,10 @@ void random_bytes(u8 *buf, u32 len)
     }
     
     if (random_fd >= 0) {
-        (void)read(random_fd, buf, len);
+        ssize_t r = read(random_fd, buf, len);
+        if ((size_t)r != len) {
+            memset(buf, 0, len);
+        }
     } else {
         struct timeval tv;
         gettimeofday(&tv, NULL);

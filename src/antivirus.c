@@ -371,12 +371,12 @@ ngfw_ret_t antivirus_scan_buffer(antivirus_t *av, const u8 *buffer, u32 len, av_
                 if (alert) {
                     alert->id = av->next_alert_id++;
                     alert->signature_id = sig->sig.id;
-                    strncpy(alert->signature_name, sig->sig.name, sizeof(alert->signature_name) - 1);
+                    snprintf(alert->signature_name, sizeof(alert->signature_name), "%s", sig->sig.name);
                     alert->threat_type = sig->sig.threat_type;
-                    strncpy(alert->threat_name, sig->sig.threat_name, sizeof(alert->threat_name) - 1);
+                    snprintf(alert->threat_name, sizeof(alert->threat_name), "%s", sig->sig.threat_name);
                     alert->timestamp = get_ms_time();
                     snprintf(alert->message, sizeof(alert->message),
-                             "%s - %s", sig->sig.name, sig->sig.description);
+                             "%s - %.511s", sig->sig.name, sig->sig.description);
 
                     av_alert_impl_t *impl = ngfw_malloc(sizeof(av_alert_impl_t));
                     if (impl) {
@@ -474,11 +474,11 @@ ngfw_ret_t antivirus_get_alerts(antivirus_t *av, av_alert_t **alerts, u32 *count
     while (alert) {
         (*alerts)[i].id = alert->alert.id;
         (*alerts)[i].signature_id = alert->alert.signature_id;
-        strncpy((*alerts)[i].signature_name, alert->alert.signature_name, sizeof((*alerts)[i].signature_name) - 1);
+        snprintf((*alerts)[i].signature_name, sizeof((*alerts)[i].signature_name), "%s", alert->alert.signature_name);
         (*alerts)[i].threat_type = alert->alert.threat_type;
-        strncpy((*alerts)[i].threat_name, alert->alert.threat_name, sizeof((*alerts)[i].threat_name) - 1);
+        snprintf((*alerts)[i].threat_name, sizeof((*alerts)[i].threat_name), "%s", alert->alert.threat_name);
         (*alerts)[i].timestamp = alert->alert.timestamp;
-        strncpy((*alerts)[i].message, alert->alert.message, sizeof((*alerts)[i].message) - 1);
+        snprintf((*alerts)[i].message, sizeof((*alerts)[i].message), "%s", alert->alert.message);
         i++;
         alert = alert->next;
     }

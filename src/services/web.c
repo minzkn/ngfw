@@ -134,14 +134,14 @@ static void parse_request(const char *buffer, http_request_t *req)
     char *query = strchr(uri, '?');
     if (query) {
         *query = '\0';
-        strncpy(req->query_string, query + 1, sizeof(req->query_string) - 1);
+        snprintf(req->query_string, sizeof(req->query_string), "%s", query + 1);
     }
-    strncpy(req->uri, path, sizeof(req->uri) - 1);
+    snprintf(req->uri, sizeof(req->uri), "%.254s", path);
 
     const char *body = strstr(buffer, "\r\n\r\n");
     if (body) {
         body += 4;
-        strncpy(req->body, body, sizeof(req->body) - 1);
+        snprintf(req->body, sizeof(req->body), "%s", body);
         req->body_length = strlen(req->body);
     }
 }
