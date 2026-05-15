@@ -18,6 +18,7 @@
 #include "ngfw/list.h"
 #include "ngfw/log.h"
 #include "ngfw/packet.h"
+#include "ngfw/session.h"
 #include <string.h>
 
 typedef struct filter_rule_internal {
@@ -130,6 +131,13 @@ int filter_match_rule(filter_rule_t *rule, packet_t *pkt)
 {
     if (!rule || !pkt || !rule->enabled) return 0;
     
+    /* Check direction */
+    if (rule->dir != FILTER_DIR_ANY) {
+        if (rule->dir == FILTER_DIR_IN && pkt->direction != PKT_DIR_IN) return 0;
+        if (rule->dir == FILTER_DIR_OUT && pkt->direction != PKT_DIR_OUT) return 0;
+        if (rule->dir == FILTER_DIR_FWD && pkt->direction != PKT_DIR_FWD) return 0;
+    }
+    
     ip_header_t *ip = packet_get_ip(pkt);
     if (!ip) return 0;
     
@@ -221,12 +229,12 @@ filter_action_t filter_process_packet(filter_t *filter, packet_t *pkt, session_t
 
 filter_stats_t *filter_get_stats(filter_t *filter)
 {
-    return filter ? &filter->stats : NULL;
+    if (!filter) return NULL;
+    return &filter->stats;
 }
 
 void filter_reset_stats(filter_t *filter)
 {
-    if (filter) {
-        memset(&filter->stats, 0, sizeof(filter_stats_t));
-    }
+    if (!filter) return;
+    memset(&filter->stats, 0, sizeof(filter_stats_t));
 }

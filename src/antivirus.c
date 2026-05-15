@@ -173,12 +173,10 @@ ngfw_ret_t antivirus_add_signature(antivirus_t *av, av_signature_t *sig)
     if (!impl) return NGFW_ERR_NO_MEM;
 
     impl->sig = *sig;
-    impl->next = NULL;
-
-    hash_insert(av->signatures, &sig->id, impl);
-
     impl->next = av->sig_list;
     av->sig_list = impl;
+
+    hash_insert(av->signatures, &impl->sig.id, impl);
 
     av->stats.signatures_loaded++;
     if (sig->enabled) {
@@ -376,7 +374,7 @@ ngfw_ret_t antivirus_scan_buffer(antivirus_t *av, const u8 *buffer, u32 len, av_
                     snprintf(alert->threat_name, sizeof(alert->threat_name), "%s", sig->sig.threat_name);
                     alert->timestamp = get_ms_time();
                     snprintf(alert->message, sizeof(alert->message),
-                             "%s - %.511s", sig->sig.name, sig->sig.description);
+                             "%.200s - %.250s", sig->sig.name, sig->sig.description);
 
                     av_alert_impl_t *impl = ngfw_malloc(sizeof(av_alert_impl_t));
                     if (impl) {

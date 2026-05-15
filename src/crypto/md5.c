@@ -14,6 +14,7 @@
  */
 
 #include "ngfw/crypto.h"
+#include <string.h>
 
 typedef struct {
     u32 state[4];
@@ -136,6 +137,7 @@ void md5_init(md5_context_t *ctx)
     c->state[2] = 0x98badcfe;
     c->state[3] = 0x10325476;
     c->count = 0;
+    memset(c->buffer, 0, sizeof(c->buffer));
 }
 
 void md5_update(md5_context_t *ctx, const u8 *data, u32 len)
@@ -145,7 +147,7 @@ void md5_update(md5_context_t *ctx, const u8 *data, u32 len)
     c->count += len * 8;
     
     for (u32 i = 0; i < len; i++) {
-        c->buffer[idx++] ^= data[i];
+        c->buffer[idx++] = data[i];
         if (idx == 64) {
             md5_transform(c->state, c->buffer);
             idx = 0;

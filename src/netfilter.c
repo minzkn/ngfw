@@ -19,8 +19,10 @@
 #include "ngfw/list.h"
 #include "ngfw/hash.h"
 #include "ngfw/packet.h"
+#include "ngfw/executil.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/wait.h>
 #include <string.h>
 #include <unistd.h>
 #include <sys/socket.h>
@@ -216,9 +218,7 @@ ngfw_ret_t netfilter_flush_table(netfilter_t *nf, nf_table_t table)
     if (!nf) return NGFW_ERR_INVALID;
     if (table >= NF_TABLE_MAX) return NGFW_ERR_INVALID;
 
-    char cmd[256];
-    snprintf(cmd, sizeof(cmd), "iptables -t %s -F", nf_table_names[table]);
-    int ret = system(cmd);
+    int ret = nfnetlink_flush_table(nf_table_names[table]);
 
     if (ret != 0) {
         log_warn("Failed to flush table %s", nf_table_names[table]);
@@ -318,54 +318,52 @@ ngfw_ret_t netfilter_register_callback(netfilter_t *nf, netfilter_callback_t cal
 
 static int run_iptables(const char *table, const char *chain, const char *rule_str)
 {
-    char cmd[1024];
-    if (table && table[0]) {
-        snprintf(cmd, sizeof(cmd), "iptables -t %s -A %s %s", table, chain, rule_str);
-    } else {
-        snprintf(cmd, sizeof(cmd), "iptables -A %s %s", chain, rule_str);
-    }
-    
-    return system(cmd);
+    return safe_iptables(table, chain, rule_str);
 }
 
 ngfw_ret_t netfilter_sync_to_kernel(netfilter_t *nf)
 {
     if (!nf) return NGFW_ERR_INVALID;
 
-    { int r = system("iptables -F"); (void)r; }
-    { int r = system("iptables -X"); (void)r; }
-    { int r = system("iptables -Z"); (void)r; }
+    { int r = nfnetlink_flush_table("filter"); (void)r; }
+    { char *argv1[] = {"iptables", "-X", NULL}; { int r = safe_exec("iptables", argv1, 5); (void)r; } }
+    { char *argv2[] = {"iptables", "-Z", NULL}; { int r = safe_exec("iptables", argv2, 5); (void)r; } }
 
     list_node_t *node;
     list_for_each(nf->rules, node) {
         netfilter_rule_t *rule = (netfilter_rule_t *)node->data;
         if (rule && rule->enabled) {
-            char rule_str[512] = "";
+            /* Build rule string safely - bounded buffer */
+            char rule_str[512];
+            int pos = 0;
             
             if (rule->protocol != NF_PROTO_ALL) {
-                strcat(rule_str, " -p ");
-                strcat(rule_str, nf_proto_names[rule->protocol]);
+                pos += snprintf(rule_str + pos, sizeof(rule_str) - pos,
+                                " -p %s", nf_proto_names[rule->protocol]);
+                if (pos >= (int)sizeof(rule_str)) continue;
             }
 
             if (rule->src_ip[0] != 0) {
-                strcat(rule_str, " -s ");
-                strcat(rule_str, rule->src_ip);
+                pos += snprintf(rule_str + pos, sizeof(rule_str) - pos,
+                                " -s %s", rule->src_ip);
+                if (pos >= (int)sizeof(rule_str)) continue;
             }
 
             if (rule->dst_ip[0] != 0) {
-                strcat(rule_str, " -d ");
-                strcat(rule_str, rule->dst_ip);
+                pos += snprintf(rule_str + pos, sizeof(rule_str) - pos,
+                                " -d %s", rule->dst_ip);
+                if (pos >= (int)sizeof(rule_str)) continue;
             }
 
             if (rule->dst_port_min > 0) {
-                char port_str[32];
-                snprintf(port_str, sizeof(port_str), " --dport %d", rule->dst_port_min);
-                strcat(rule_str, port_str);
+                pos += snprintf(rule_str + pos, sizeof(rule_str) - pos,
+                                " --dport %u", rule->dst_port_min);
+                if (pos >= (int)sizeof(rule_str)) continue;
             }
 
-            char target[32];
-            snprintf(target, sizeof(target), " -j %s", nf_target_names[rule->target]);
-            strcat(rule_str, target);
+            pos += snprintf(rule_str + pos, sizeof(rule_str) - pos,
+                            " -j %s", nf_target_names[rule->target]);
+            if (pos >= (int)sizeof(rule_str)) continue;
 
             run_iptables(nf_table_names[rule->table], nf_chain_names[rule->chain], rule_str);
         }
@@ -381,10 +379,36 @@ ngfw_ret_t netfilter_load_from_kernel(netfilter_t *nf)
 
     netfilter_clear_rules(nf);
 
-    FILE *fp = popen("iptables -L -n -v -x", "r");
-    if (!fp) return NGFW_ERR;
+    /* Use safe fork+exec with pipe to read iptables output */
+    int pipe_fd[2];
+    if (pipe(pipe_fd) < 0) return NGFW_ERR;
 
+    pid_t pid = fork();
+    if (pid == -1) {
+        close(pipe_fd[0]); close(pipe_fd[1]);
+        return NGFW_ERR;
+    }
+
+    if (pid == 0) {
+        /* Child: exec iptables with stdout to pipe */
+        close(pipe_fd[0]);
+        dup2(pipe_fd[1], STDOUT_FILENO);
+        close(pipe_fd[1]);
+        char *argv[] = {"iptables", "-L", "-n", "-v", "-x", NULL};
+        execvp("iptables", argv);
+        _exit(127);
+    }
+
+    /* Parent: read from pipe */
+    close(pipe_fd[1]);
     char line[1024];
+    FILE *fp = fdopen(pipe_fd[0], "r");
+    if (!fp) {
+        close(pipe_fd[0]);
+        waitpid(pid, NULL, 0);
+        return NGFW_ERR;
+    }
+
     while (fgets(line, sizeof(line), fp)) {
         if (strstr(line, "Chain")) continue;
         
@@ -399,14 +423,15 @@ ngfw_ret_t netfilter_load_from_kernel(netfilter_t *nf)
 
         char *p = line;
         while (*p == ' ') p++;
-        if (isdigit(*p)) {
+        if (isdigit((unsigned char)*p)) {
             sscanf(p, "%lu", &rule.packet_count);
         }
 
         netfilter_add_rule(nf, &rule);
     }
 
-    pclose(fp);
+    fclose(fp);
+    waitpid(pid, NULL, 0);
     log_info("Loaded %u rules from kernel", nf->stats.active_rules);
     return NGFW_OK;
 }

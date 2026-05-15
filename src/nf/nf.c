@@ -28,15 +28,6 @@ struct nf_handle {
     void *hook_data[5];
     bool initialized;
 };
-
-static const char * __attribute__((unused)) chain_names[] = {
-    "prerouting", "input", "forward", "output", "postrouting"
-};
-
-static const char * __attribute__((unused)) hook_names[] = {
-    "PREROUTING", "INPUT", "FORWARD", "OUTPUT", "POSTROUTING"
-};
-
 nf_handle_t *nf_create(nf_family_t family)
 {
     nf_handle_t *handle = ngfw_malloc(sizeof(nf_handle_t));

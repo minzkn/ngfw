@@ -38,8 +38,8 @@ struct lru_cache {
 
 static u32 hash_key(const void *key, u32 size)
 {
-    (void)size;
-    return (u32)(uintptr_t)key;
+    if (size == 0) return 0;
+    return (u32)(uintptr_t)key % size;
 }
 
 static bool equal_key(const void *a, const void *b)
@@ -79,7 +79,7 @@ void lru_destroy(lru_cache_t *cache)
 {
     if (!cache) return;
     
-    lru_clear(cache);
+    /* Destroy hash - its destroy_node callback will free all nodes */
     hash_destroy(cache->hash);
     ngfw_free(cache);
 }
@@ -116,9 +116,7 @@ static void lru_attach_head(lru_cache_t *cache, lru_node_t *node)
 
 static void lru_evict(lru_cache_t *cache)
 {
-    if (!cache->tail || cache->size <= cache->capacity) return;
-    
-    while (cache->size > cache->capacity && cache->tail) {
+    while (cache->size > 0 && cache->size >= cache->capacity && cache->tail) {
         lru_node_t *evict = cache->tail;
         
         lru_detach(cache, evict);
@@ -235,8 +233,11 @@ void lru_clear(lru_cache_t *cache)
         node = next;
     }
     
+    /* Destroy hash without calling destructor (nodes already freed) */
+    hash_destroy_t saved_destroy = cache->hash->destroy;
+    cache->hash->destroy = NULL;
     hash_destroy(cache->hash);
-    cache->hash = hash_create(cache->capacity * 2, hash_key, equal_key, destroy_node);
+    cache->hash = hash_create(cache->capacity * 2, hash_key, equal_key, saved_destroy);
     
     cache->head = NULL;
     cache->tail = NULL;

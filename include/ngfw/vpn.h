@@ -17,6 +17,7 @@
 #define NGFW_VPN_H
 
 #include "types.h"
+#include "packet.h"
 
 typedef enum {
     VPN_TYPE_NONE,
@@ -137,6 +138,8 @@ typedef struct ipsec_sa {
     u64 expires;
     u64 bytes;
     u64 packets;
+    u32 replay_window;
+    u64 replay_bitmap;
 } ipsec_sa_t;
 
 typedef struct vpn_tunnel {
@@ -192,5 +195,12 @@ void vpn_reset_stats(vpn_t *vpn);
 
 ngfw_ret_t vpn_set_psk(vpn_t *vpn, const char *psk);
 ngfw_ret_t vpn_set_certificate(vpn_t *vpn, const char *cert, const char *key);
+ngfw_ret_t vpn_tick(vpn_t *vpn);
+
+/* Data plane: ESP packet processing */
+ngfw_ret_t vpn_process_outbound(vpn_tunnel_t *tunnel, packet_t *pkt);
+ngfw_ret_t vpn_process_inbound(vpn_t *vpn, packet_t *pkt);
+ngfw_ret_t vpn_process_packet(vpn_t *vpn, packet_t *pkt);
+bool vpn_should_process(vpn_tunnel_t *tunnel, packet_t *pkt);
 
 #endif

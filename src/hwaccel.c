@@ -16,6 +16,8 @@
 #include "ngfw/hwaccel.h"
 #include "ngfw/memory.h"
 #include "ngfw/log.h"
+#include "ngfw/crypto.h"
+#include "ngfw/executil.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -215,7 +217,7 @@ ngfw_ret_t hwaccel_set_offload(hwaccel_t *hw, const char *iface, hwaccel_type_t 
 {
     if (!hw || !iface) return NGFW_ERR_INVALID;
 
-    char cmd[256];
+    (void)iface;
     const char *offload_type = NULL;
 
     switch (type) {
@@ -234,10 +236,9 @@ ngfw_ret_t hwaccel_set_offload(hwaccel_t *hw, const char *iface, hwaccel_type_t 
 
     if (!offload_type) return NGFW_ERR_INVALID;
 
-    snprintf(cmd, sizeof(cmd), "ethtool -K %s %s %s 2>/dev/null",
-             iface, offload_type, enable ? "on" : "off");
-
-    int ret = system(cmd);
+    char *argv[] = {"ethtool", "-K", (char*)iface, (char*)offload_type,
+                    enable ? "on" : "off", NULL};
+    int ret = safe_exec("ethtool", argv, 10);
     if (ret != 0) {
         log_warn("Failed to set offload %s on %s", offload_type, iface);
         return NGFW_ERR;
@@ -251,17 +252,17 @@ ngfw_ret_t hwaccel_enable_rss(hwaccel_t *hw, const char *iface, u16 num_queues)
 {
     if (!hw || !iface) return NGFW_ERR_INVALID;
 
-    char cmd[256];
-    snprintf(cmd, sizeof(cmd), "ethtool -L %s combined %d 2>/dev/null", iface, num_queues);
-
-    int ret = system(cmd);
+    char combined_str[16];
+    snprintf(combined_str, sizeof(combined_str), "%d", num_queues);
+    char *argv1[] = {"ethtool", "-L", (char*)iface, "combined", combined_str, NULL};
+    int ret = safe_exec("ethtool", argv1, 10);
     if (ret != 0) {
         log_warn("Failed to enable RSS on %s", iface);
         return NGFW_ERR;
     }
 
-    snprintf(cmd, sizeof(cmd), "ethtool -X %s equal %d 2>/dev/null", iface, num_queues);
-    if (system(cmd) < 0) {}
+    char *argv2[] = {"ethtool", "-X", (char*)iface, "equal", combined_str, NULL};
+    { int r = safe_exec("ethtool", argv2, 10); (void)r; }
 
     log_info("Enabled RSS with %d queues on %s", num_queues, iface);
     return NGFW_OK;
@@ -271,12 +272,11 @@ ngfw_ret_t hwaccel_disable_rss(hwaccel_t *hw, const char *iface)
 {
     if (!hw || !iface) return NGFW_ERR_INVALID;
 
-    char cmd[256];
-    snprintf(cmd, sizeof(cmd), "ethtool -X %s delete 2>/dev/null", iface);
-    { int r = system(cmd); (void)r; }
+    char *argv1[] = {"ethtool", "-X", (char*)iface, "delete", NULL};
+    { int r = safe_exec("ethtool", argv1, 10); (void)r; }
 
-    snprintf(cmd, sizeof(cmd), "ethtool -L %s combined 1 2>/dev/null", iface);
-    { int r = system(cmd); (void)r; }
+    char *argv2[] = {"ethtool", "-L", (char*)iface, "combined", "1", NULL};
+    { int r = safe_exec("ethtool", argv2, 10); (void)r; }
 
     log_info("Disabled RSS on %s", iface);
     return NGFW_OK;
@@ -407,6 +407,42 @@ ngfw_ret_t hwaccel_crypto_aes_encrypt(hwaccel_t *hw, const u8 *key, const u8 *iv
         log_debug("Using software AES encryption");
     }
 
+    /* Perform actual AES-128-CBC encryption */
+    aes_context_t ctx;
+    aes_setkey(&ctx, key, AES_KEY_128);
+
+    if (iv && len >= 16) {
+        u8 block[16];
+        u8 feedback[16];
+        memcpy(feedback, iv, 16);
+
+        u32 i = 0;
+        while (i < len) {
+            u32 blk = (len - i < 16) ? (len - i) : 16;
+            memset(block, 0, 16);
+            memcpy(block, src + i, blk);
+
+            /* XOR with IV (CBC mode) */
+            for (int j = 0; j < 16; j++) {
+                block[j] ^= feedback[j];
+            }
+
+            aes_encrypt(&ctx, block, dst + i);
+            memcpy(feedback, dst + i, 16);
+            i += 16;
+        }
+    } else {
+        /* ECB mode for each 16-byte block */
+        u32 i = 0;
+        while (i < len) {
+            u8 block[16];
+            memset(block, 0, 16);
+            memcpy(block, src + i, (len - i < 16) ? (len - i) : 16);
+            aes_encrypt(&ctx, block, dst + i);
+            i += 16;
+        }
+    }
+
     return NGFW_OK;
 }
 
@@ -421,6 +457,47 @@ ngfw_ret_t hwaccel_crypto_aes_decrypt(hwaccel_t *hw, const u8 *key, const u8 *iv
         log_debug("Using hardware AES decryption");
     } else {
         log_debug("Using software AES decryption");
+    }
+
+    /* Perform actual AES-128-CBC decryption */
+    aes_context_t ctx;
+    aes_setkey(&ctx, key, AES_KEY_128);
+
+    if (iv && len >= 16) {
+        u8 block[16];
+        u8 prev[16];
+        u32 i = 0;
+
+        while (i < len) {
+            u32 blk = (len - i < 16) ? (len - i) : 16;
+            memset(block, 0, 16);
+            memcpy(block, src + i, blk);
+
+            if (i == 0) {
+                memcpy(prev, iv, 16);
+            } else {
+                memcpy(prev, src + i - 16, 16);
+            }
+
+            aes_decrypt(&ctx, block, dst + i);
+
+            /* XOR with prev ciphertext (CBC mode) */
+            for (int j = 0; j < 16; j++) {
+                dst[i + j] ^= prev[j];
+            }
+
+            i += 16;
+        }
+    } else {
+        /* ECB mode decryption */
+        u32 i = 0;
+        while (i < len) {
+            u8 block[16];
+            memset(block, 0, 16);
+            memcpy(block, src + i, (len - i < 16) ? (len - i) : 16);
+            aes_decrypt(&ctx, block, dst + i);
+            i += 16;
+        }
     }
 
     return NGFW_OK;

@@ -29,13 +29,13 @@ struct metrics_registry {
 
 static u32 metric_name_hash(const void *key, u32 size)
 {
-    (void)size;
+    if (size == 0) return 0;
     const char *name = (const char *)key;
     u32 hash = 5381;
     while (*name) {
         hash = ((hash << 5) + hash) + (*name++);
     }
-    return hash;
+    return hash % size;
 }
 
 static bool metric_name_equal(const void *a, const void *b)

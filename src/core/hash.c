@@ -37,12 +37,35 @@ hash_table_t *hash_create(u32 size, hash_func_t hash, hash_equal_t equal, hash_d
     table->equal = equal;
     table->destroy = destroy;
     
+    /* Initialize segment locks for reduced contention */
+    table->segment_count = HASH_SEGMENT_COUNT;
+    table->segments = ngfw_malloc(sizeof(struct hash_segment) * table->segment_count);
+    if (!table->segments) {
+        ngfw_free(table->buckets);
+        ngfw_free(table);
+        return NULL;
+    }
+    
+    for (u32 i = 0; i < table->segment_count; i++) {
+        pthread_rwlock_init(&table->segments[i].lock, NULL);
+    }
+    
     return table;
+}
+
+static inline u32 hash_get_segment(hash_table_t *table, u32 bucket_idx)
+{
+    return bucket_idx % table->segment_count;
 }
 
 void hash_destroy(hash_table_t *table)
 {
     if (!table) return;
+    
+    /* Destroy all segments */
+    for (u32 i = 0; i < table->segment_count; i++) {
+        pthread_rwlock_wrlock(&table->segments[i].lock);
+    }
     
     for (u32 i = 0; i < table->size; i++) {
         struct hash_node *node = table->buckets[i];
@@ -57,10 +80,133 @@ void hash_destroy(hash_table_t *table)
     }
     
     ngfw_free(table->buckets);
+    
+    for (u32 i = 0; i < table->segment_count; i++) {
+        pthread_rwlock_unlock(&table->segments[i].lock);
+        pthread_rwlock_destroy(&table->segments[i].lock);
+    }
+    ngfw_free(table->segments);
     ngfw_free(table);
 }
 
 ngfw_ret_t hash_insert(hash_table_t *table, void *key, void *value)
+{
+    if (!table) return NGFW_ERR_INVALID;
+    
+    u32 idx = table->hash(key, table->size);
+    u32 seg = hash_get_segment(table, idx);
+    
+    pthread_rwlock_wrlock(&table->segments[seg].lock);
+    
+    struct hash_node *node = ngfw_malloc(sizeof(struct hash_node));
+    if (!node) {
+        pthread_rwlock_unlock(&table->segments[seg].lock);
+        return NGFW_ERR_NO_MEM;
+    }
+    
+    node->key = key;
+    node->value = value;
+    node->next = table->buckets[idx];
+    table->buckets[idx] = node;
+    table->count++;
+    
+    pthread_rwlock_unlock(&table->segments[seg].lock);
+    return NGFW_OK;
+}
+
+void *hash_lookup(hash_table_t *table, const void *key)
+{
+    if (!table) return NULL;
+    
+    u32 idx = table->hash(key, table->size);
+    u32 seg = hash_get_segment(table, idx);
+    
+    pthread_rwlock_rdlock(&table->segments[seg].lock);
+    
+    struct hash_node *node = table->buckets[idx];
+    
+    while (node) {
+        if (table->equal && table->equal(key, node->key)) {
+            void *value = node->value;
+            pthread_rwlock_unlock(&table->segments[seg].lock);
+            return value;
+        } else if (key == node->key) {
+            void *value = node->value;
+            pthread_rwlock_unlock(&table->segments[seg].lock);
+            return value;
+        }
+        node = node->next;
+    }
+    
+    pthread_rwlock_unlock(&table->segments[seg].lock);
+    return NULL;
+}
+
+void *hash_remove(hash_table_t *table, const void *key)
+{
+    if (!table) return NULL;
+    
+    u32 idx = table->hash(key, table->size);
+    u32 seg = hash_get_segment(table, idx);
+    
+    pthread_rwlock_wrlock(&table->segments[seg].lock);
+    
+    struct hash_node *node = table->buckets[idx];
+    struct hash_node *prev = NULL;
+    
+    while (node) {
+        if (table->equal && table->equal(key, node->key)) {
+            if (prev) {
+                prev->next = node->next;
+            } else {
+                table->buckets[idx] = node->next;
+            }
+            
+            void *value = node->value;
+            ngfw_free(node);
+            table->count--;
+            
+            pthread_rwlock_unlock(&table->segments[seg].lock);
+            return value;
+        }
+        prev = node;
+        node = node->next;
+    }
+    
+    pthread_rwlock_unlock(&table->segments[seg].lock);
+    return NULL;
+}
+
+u32 hash_size(hash_table_t *table)
+{
+    if (!table) return 0;
+    
+    /* Read count without locking - it's atomic enough for stats */
+    return table->count;
+}
+
+bool hash_empty(hash_table_t *table)
+{
+    return hash_size(table) == 0;
+}
+
+/* Lock management for external use - now with segment locking */
+void hash_rdlock(hash_table_t *table)
+{
+    if (table) pthread_rwlock_rdlock(&table->segments[0].lock);
+}
+
+void hash_wrlock(hash_table_t *table)
+{
+    if (table) pthread_rwlock_wrlock(&table->segments[0].lock);
+}
+
+void hash_unlock(hash_table_t *table)
+{
+    if (table) pthread_rwlock_unlock(&table->segments[0].lock);
+}
+
+ngfw_ret_t hash_insert_locked(hash_table_t *table, void *key, void *value)
 {
     if (!table) return NGFW_ERR_INVALID;
     
@@ -78,7 +224,7 @@ ngfw_ret_t hash_insert(hash_table_t *table, void *key, void *value)
     return NGFW_OK;
 }
 
-void *hash_lookup(hash_table_t *table, const void *key)
+void *hash_lookup_locked(hash_table_t *table, const void *key)
 {
     if (!table) return NULL;
     
@@ -97,7 +243,7 @@ void *hash_lookup(hash_table_t *table, const void *key)
     return NULL;
 }
 
-void *hash_remove(hash_table_t *table, const void *key)
+void *hash_remove_locked(hash_table_t *table, const void *key)
 {
     if (!table) return NULL;
     
@@ -125,29 +271,21 @@ void *hash_remove(hash_table_t *table, const void *key)
     return NULL;
 }
 
-u32 hash_size(hash_table_t *table)
+u32 hash_int(const void *key, u32 size)
 {
-    return table ? table->count : 0;
+    if (size == 0) return 0;
+    return (u32)(uintptr_t)key % size;
 }
 
-bool hash_empty(hash_table_t *table)
+u32 hash_str(const void *key, u32 size)
 {
-    return !table || table->count == 0;
-}
-
-u32 hash_int(const void *key)
-{
-    return (u32)(uintptr_t)key;
-}
-
-u32 hash_str(const void *key)
-{
+    if (size == 0) return 0;
     const char *str = (const char *)key;
     u32 h = 5381;
     while (*str) {
         h = ((h << 5) + h) + (u8)*str++;
     }
-    return h;
+    return h % size;
 }
 
 bool equal_int(const void *a, const void *b)

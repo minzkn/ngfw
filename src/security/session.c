@@ -25,6 +25,8 @@
 
 session_t *session_create(const session_key_t *key)
 {
+    if (!key) return NULL;
+    
     session_t *session = ngfw_malloc(sizeof(session_t));
     if (!session) return NULL;
     
@@ -40,6 +42,7 @@ session_t *session_create(const session_key_t *key)
     session->ifindex_in = 0;
     session->ifindex_out = 0;
     session->data = NULL;
+    refcount_init(&session->refcnt, 1);  /* Initial reference */
     
     return session;
 }
@@ -58,11 +61,11 @@ void session_update(session_t *session, packet_t *pkt)
     session->last_access = get_ms_time();
     
     if (pkt->direction == PKT_DIR_IN) {
-        session->packets_in++;
-        session->bytes_in += pkt->len;
+        __sync_fetch_and_add(&session->packets_in, 1);
+        __sync_fetch_and_add(&session->bytes_in, pkt->len);
     } else {
-        session->packets_out++;
-        session->bytes_out += pkt->len;
+        __sync_fetch_and_add(&session->packets_out, 1);
+        __sync_fetch_and_add(&session->bytes_out, pkt->len);
     }
     
     if (session->state == SESSION_STATE_NEW) {
@@ -84,8 +87,8 @@ u32 session_key_hash(const void *key, u32 size)
     hash ^= k->src_port + 0x9e3779b9 + (hash << 6) + (hash >> 2);
     hash ^= k->dst_port + 0x9e3779b9 + (hash << 6) + (hash >> 2);
     hash ^= k->protocol + 0x9e3779b9 + (hash << 6) + (hash >> 2);
-    (void)size;
-    return hash;
+    if (size == 0) return 0;
+    return hash % size;
 }
 
 bool session_key_equal(const void *a, const void *b)
@@ -112,7 +115,7 @@ static bool equal_session_key(const void *a, const void *b)
 static void destroy_session(void *key, void *value)
 {
     (void)key;
-    session_destroy((session_t *)value);
+    session_put((session_t *)value);  /* Release hash table's reference */
 }
 
 session_table_t *session_table_create(u32 max_sessions)
@@ -142,29 +145,42 @@ void session_table_destroy(session_table_t *table)
 session_t *session_table_lookup(session_table_t *table, const session_key_t *key)
 {
     if (!table || !key) return NULL;
-    return (session_t *)hash_lookup(table->hash, key);
+    
+    session_t *session = (session_t *)hash_lookup(table->hash, key);
+    if (session) {
+        session_get(session);  /* Acquire reference */
+    }
+    
+    return session;  /* Caller must call session_put() */
 }
 
 ngfw_ret_t session_table_insert(session_table_t *table, session_t *session)
 {
     if (!table || !session) return NGFW_ERR_INVALID;
     
-    if (hash_size(table->hash) >= table->max_sessions) {
+    u32 current_count = hash_size(table->hash);
+    if (current_count >= table->max_sessions) {
         session_table_cleanup(table, get_ms_time());
         
-        if (hash_size(table->hash) >= table->max_sessions) {
+        current_count = hash_size(table->hash);
+        if (current_count >= table->max_sessions) {
             log_warn("Session table full");
             return NGFW_ERR_NO_RESOURCE;
         }
     }
     
-    return hash_insert(table->hash, &session->key, session);
+    session_get(session);  /* Hold reference for hash table */
+    ngfw_ret_t ret = hash_insert(table->hash, &session->key, session);
+    
+    return ret;
 }
 
 void session_table_remove(session_table_t *table, session_t *session)
 {
     if (!table || !session) return;
+    
     hash_remove(table->hash, &session->key);
+    /* hash_remove calls destroy_session which calls session_put */
 }
 
 u32 session_table_count(session_table_t *table)
@@ -175,9 +191,26 @@ u32 session_table_count(session_table_t *table)
 void session_table_cleanup(session_table_t *table, u64 now)
 {
     if (!table) return;
-    
+
     u64 cleanup_interval = 60000;
     if (now - table->cleanup_time < cleanup_interval) return;
-    
+
     table->cleanup_time = now;
+
+    /* Hash table has its own segment locks, no external lock needed */
+    void **iter = hash_iterate_start(table->hash);
+    if (!iter) {
+        return;
+    }
+
+    while (hash_iterate_has_next(iter)) {
+        session_t *session = (session_t *)hash_iterate_next(table->hash, iter);
+        if (session && session_expired(session, now)) {
+            /* Release our reference from hash table ownership */
+            hash_remove(table->hash, &session->key);
+            /* hash_remove calls session_put, no need to call again */
+        }
+    }
+
+    ngfw_free(iter);
 }

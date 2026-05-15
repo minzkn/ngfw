@@ -34,7 +34,7 @@ struct bloom_filter {
 
 static u32 hash_function(bloom_filter_t *bloom, const void *data, u32 len, u32 seed)
 {
-    u8 hash[16];
+    u8 hash[32];
     sha256((const u8 *)data, len, hash);
     
     u32 h1 = *(u32 *)hash;

@@ -42,7 +42,7 @@ ngfw_ret_t plugin_init(void)
 {
     if (plugin_system_initialized) return NGFW_OK;
     
-    plugins = hash_create(64, NULL, NULL, NULL);
+    plugins = hash_create(64, hash_str, equal_str, NULL);
     if (!plugins) return NGFW_ERR_NO_MEM;
     
     plugin_system_initialized = true;
@@ -86,7 +86,9 @@ ngfw_ret_t plugin_load(const char *path)
         return NGFW_ERR_NOT_FOUND;
     }
     
-    plugin_register_fn register_fn = (plugin_register_fn)dlsym(handle, "plugin_register");
+    plugin_register_fn register_fn;
+    void *sym = dlsym(handle, "plugin_register");
+    memcpy(&register_fn, &sym, sizeof(register_fn));
     if (!register_fn) {
         log_err("Plugin %s has no plugin_register function", path);
         dlclose(handle);

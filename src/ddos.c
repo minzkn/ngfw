@@ -82,6 +82,18 @@ static bool blocked_ip_match(const void *key1, const void *key2)
     return (*(const u32 *)key1) == (*(const u32 *)key2);
 }
 
+static void flow_destroy(void *key, void *value)
+{
+    ngfw_free(key);
+    ngfw_free(value);
+}
+
+static void blocked_ip_destroy(void *key, void *value)
+{
+    ngfw_free(key);
+    ngfw_free(value);
+}
+
 ddos_t *ddos_create(void)
 {
     ddos_t *ddos = ngfw_malloc(sizeof(ddos_t));
@@ -89,8 +101,8 @@ ddos_t *ddos_create(void)
 
     memset(ddos, 0, sizeof(ddos_t));
 
-    ddos->flow_table = hash_create(8192, flow_hash, flow_match, NULL);
-    ddos->blocked_ips = hash_create(1024, blocked_ip_hash, blocked_ip_match, NULL);
+    ddos->flow_table = hash_create(8192, flow_hash, flow_match, flow_destroy);
+    ddos->blocked_ips = hash_create(1024, blocked_ip_hash, blocked_ip_match, blocked_ip_destroy);
 
     if (!ddos->flow_table || !ddos->blocked_ips) {
         if (ddos->flow_table) hash_destroy(ddos->flow_table);
@@ -223,7 +235,13 @@ static ip_flow_t *get_or_create_flow(ddos_t *ddos, u32 ip)
         flow->first_seen = get_ms_time();
         flow->last_seen = flow->first_seen;
 
-        hash_insert(ddos->flow_table, &ip, flow);
+        u32 *key = ngfw_malloc(sizeof(u32));
+        if (!key) {
+            ngfw_free(flow);
+            return NULL;
+        }
+        *key = ip;
+        hash_insert(ddos->flow_table, key, flow);
     }
 
     flow->last_seen = get_ms_time();
@@ -364,7 +382,13 @@ ngfw_ret_t ddos_block_ip(ddos_t *ddos, u32 ip, u32 duration_sec, const char *rea
     blocked->expires_at = blocked->blocked_at + (duration_sec * 1000);
     strncpy(blocked->reason, reason ? reason : "Unknown", sizeof(blocked->reason) - 1);
 
-    hash_insert(ddos->blocked_ips, &ip, blocked);
+    u32 *key = ngfw_malloc(sizeof(u32));
+    if (!key) {
+        ngfw_free(blocked);
+        return NGFW_ERR_NO_MEM;
+    }
+    *key = ip;
+    hash_insert(ddos->blocked_ips, key, blocked);
 
     ddos->stats.blocked_ips++;
     ddos->stats.attacks_detected++;
@@ -394,7 +418,7 @@ ngfw_ret_t ddos_unblock_all(ddos_t *ddos)
     if (!ddos) return NGFW_ERR_INVALID;
 
     hash_destroy(ddos->blocked_ips);
-    ddos->blocked_ips = hash_create(1024, blocked_ip_hash, blocked_ip_match, NULL);
+    ddos->blocked_ips = hash_create(1024, blocked_ip_hash, blocked_ip_match, blocked_ip_destroy);
 
     log_info("DDoS: Unblocked all IPs");
 

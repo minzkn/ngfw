@@ -28,6 +28,12 @@
 #include <pthread.h>
 #include <errno.h>
 
+static void event_handler_key_free(void *key, void *value)
+{
+    (void)value;
+    ngfw_free(key);
+}
+
 struct event_loop {
     u32 max_events;
     hash_table_t *handlers;
@@ -50,7 +56,7 @@ event_loop_t *event_loop_create(u32 max_events)
     if (!loop) return NULL;
 
     loop->max_events = max_events > 0 ? max_events : 1024;
-    loop->handlers = hash_create(64, NULL, NULL, NULL);
+    loop->handlers = hash_create(64, hash_str, equal_str, event_handler_key_free);
     loop->event_queue = list_create(NULL);
 
     pthread_mutex_init(&loop->lock, NULL);
@@ -157,12 +163,25 @@ ngfw_ret_t event_loop_register_handler(event_loop_t *loop, event_type_t type, ev
 {
     if (!loop || !callback) return NGFW_ERR_INVALID;
     
-    char key[32];
-    snprintf(key, sizeof(key), "%u", type);
+    char *key = ngfw_malloc(32);
+    if (!key) return NGFW_ERR_NO_MEM;
+    snprintf(key, 32, "%u", type);
+    
+    /* Store user_data under key for this handler */
+    char *ctx_key = ngfw_malloc(32);
+    if (!ctx_key) {
+        ngfw_free(key);
+        return NGFW_ERR_NO_MEM;
+    }
+    snprintf(ctx_key, 32, "ctx_%u", type);
     
     pthread_mutex_lock(&loop->lock);
-    hash_insert(loop->handlers, key, callback);
-    hash_insert(loop->handlers, "context", user_data);
+    {
+        void *ptr;
+        memcpy(&ptr, &callback, sizeof(ptr));
+        hash_insert(loop->handlers, key, ptr);
+    }
+    hash_insert(loop->handlers, ctx_key, user_data);
     pthread_mutex_unlock(&loop->lock);
     
     return NGFW_OK;
@@ -203,7 +222,11 @@ void scheduler_destroy(scheduler_t *scheduler)
 
 ngfw_ret_t scheduler_init(scheduler_t *scheduler)
 {
-    (void)scheduler;
+    if (!scheduler) return NGFW_ERR_INVALID;
+
+    scheduler->running = false;
+    scheduler->next_task_id = 1;
+
     return NGFW_OK;
 }
 
@@ -326,35 +349,44 @@ ngfw_ret_t scheduler_run_once(scheduler_t *scheduler)
 
 wheel_timer_t *wheel_timer_create(u32 num_buckets)
 {
-    (void)num_buckets;
-    return ngfw_malloc(sizeof(wheel_timer_t));
+    wheel_timer_t *timer = ngfw_malloc(sizeof(wheel_timer_t));
+    if (!timer) return NULL;
+
+    timer->num_buckets = num_buckets > 0 ? num_buckets : 64;
+    timer->current_bucket = 0;
+    timer->last_update = get_ms_time();
+
+    return timer;
 }
 
 void wheel_timer_destroy(wheel_timer_t *timer)
 {
+    if (!timer) return;
     ngfw_free(timer);
 }
 
 ngfw_ret_t timer_start(wheel_timer_t *timer)
 {
-    (void)timer;
+    if (!timer) return NGFW_ERR_INVALID;
+    timer->last_update = get_ms_time();
+    timer->current_bucket = 0;
     return NGFW_OK;
 }
 
 ngfw_ret_t timer_stop(wheel_timer_t *timer)
 {
-    (void)timer;
+    if (!timer) return NGFW_ERR_INVALID;
     return NGFW_OK;
 }
 
 ngfw_ret_t timer_add_task(wheel_timer_t *timer, u32 id, u64 delay_ms, timer_callback_t callback, void *arg)
 {
     if (!timer || !callback) return NGFW_ERR_INVALID;
-    
+
     (void)id;
     (void)delay_ms;
     (void)arg;
-    
+
     log_debug("Timer task added: id=%u delay=%lu ms", id, (unsigned long)delay_ms);
     return NGFW_OK;
 }
@@ -362,7 +394,7 @@ ngfw_ret_t timer_add_task(wheel_timer_t *timer, u32 id, u64 delay_ms, timer_call
 ngfw_ret_t timer_cancel(wheel_timer_t *timer, u32 id)
 {
     if (!timer) return NGFW_ERR_INVALID;
-    
+
     (void)id;
     log_debug("Timer task cancelled: id=%u", id);
     return NGFW_OK;
@@ -371,7 +403,14 @@ ngfw_ret_t timer_cancel(wheel_timer_t *timer, u32 id)
 ngfw_ret_t timer_process(wheel_timer_t *timer)
 {
     if (!timer) return NGFW_ERR_INVALID;
-    
+
+    u64 now = get_ms_time();
+    u64 elapsed = now - timer->last_update;
+    if (elapsed < 10) return NGFW_OK;
+
+    timer->current_bucket = (timer->current_bucket + (u32)(elapsed / 10)) % timer->num_buckets;
+    timer->last_update = now;
+
     return NGFW_OK;
 }
 
@@ -381,7 +420,7 @@ epoll_event_loop_t *epoll_loop_create(void)
     if (!loop) return NULL;
 
     loop->epoll_fd = epoll_create1(0);
-    loop->handlers = hash_create(64, NULL, NULL, NULL);
+    loop->handlers = hash_create(64, hash_str, equal_str, event_handler_key_free);
     loop->running = false;
 
     return loop;
@@ -406,14 +445,19 @@ ngfw_ret_t epoll_loop_add_fd(epoll_event_loop_t *loop, int fd, event_callback_t 
     struct epoll_event ev;
     memset(&ev, 0, sizeof(ev));
     ev.events = EPOLLIN | EPOLLET;
-    ev.data.ptr = callback;
+    {
+        void *ptr;
+        memcpy(&ptr, &callback, sizeof(ptr));
+        ev.data.ptr = ptr;
+    }
     
     if (epoll_ctl(loop->epoll_fd, EPOLL_CTL_ADD, fd, &ev) < 0) {
         return NGFW_ERR;
     }
     
-    char key[32];
-    snprintf(key, sizeof(key), "fd_%d", fd);
+    char *key = ngfw_malloc(32);
+    if (!key) return NGFW_ERR_NO_MEM;
+    snprintf(key, 32, "fd_%d", fd);
     hash_insert(loop->handlers, key, user_data);
     
     return NGFW_OK;
@@ -430,9 +474,11 @@ ngfw_ret_t epoll_loop_run(epoll_event_loop_t *loop)
         int nfds = epoll_wait(loop->epoll_fd, events, 64, 1000);
 
         for (int i = 0; i < nfds; i++) {
-            event_callback_t callback = events[i].data.ptr;
-            if (callback) {
-                callback(loop, NULL, NULL);
+            void *ptr = events[i].data.ptr;
+            if (ptr) {
+                event_callback_t cb_func;
+                memcpy(&cb_func, &ptr, sizeof(cb_func));
+                cb_func(0, NULL, NULL);
             }
         }
     }

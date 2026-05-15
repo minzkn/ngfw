@@ -46,6 +46,9 @@ static bool url_match(const void *key1, const void *key2)
     return strcmp((const char *)key1, (const char *)key2) == 0;
 }
 
+static void url_rule_destroy(void *key, void *value);
+static void dns_rule_destroy(void *key, void *value);
+
 urlfilter_t *urlfilter_create(void)
 {
     urlfilter_t *filter = ngfw_malloc(sizeof(urlfilter_t));
@@ -53,8 +56,8 @@ urlfilter_t *urlfilter_create(void)
     
     memset(filter, 0, sizeof(urlfilter_t));
     
-    filter->rules = hash_create(128, url_hash, url_match, NULL);
-    filter->dns_rules = hash_create(128, url_hash, url_match, NULL);
+    filter->rules = hash_create(128, url_hash, url_match, url_rule_destroy);
+    filter->dns_rules = hash_create(128, url_hash, url_match, dns_rule_destroy);
     filter->suffix_tree = suffix_tree_create();
     
     return filter;
@@ -91,14 +94,35 @@ ngfw_ret_t urlfilter_shutdown(urlfilter_t *filter)
     return NGFW_OK;
 }
 
+static void url_rule_destroy(void *key, void *value)
+{
+    (void)value;
+    ngfw_free(key);
+    ngfw_free(value);
+}
+
+static void dns_rule_destroy(void *key, void *value)
+{
+    (void)key;
+    ngfw_free(value);
+}
+
 ngfw_ret_t urlfilter_add_rule(urlfilter_t *filter, url_rule_t *rule)
 {
     if (!filter || !rule) return NGFW_ERR_INVALID;
     
-    char key[512];
-    snprintf(key, sizeof(key), "%s:%u", rule->pattern, rule->id);
+    url_rule_t *copy = ngfw_malloc(sizeof(url_rule_t));
+    if (!copy) return NGFW_ERR_NO_MEM;
+    *copy = *rule;
     
-    hash_insert(filter->rules, key, rule);
+    char *key = ngfw_malloc(512);
+    if (!key) {
+        ngfw_free(copy);
+        return NGFW_ERR_NO_MEM;
+    }
+    snprintf(key, 512, "%s:%u", rule->pattern, rule->id);
+    
+    hash_insert(filter->rules, key, copy);
     
     return NGFW_OK;
 }
@@ -108,15 +132,22 @@ ngfw_ret_t urlfilter_del_rule(urlfilter_t *filter, u32 rule_id)
     if (!filter) return NGFW_ERR_INVALID;
     
     void **iter = hash_iterate_start(filter->rules);
+    if (!iter) return NGFW_ERR;
+    
     while (hash_iterate_has_next(iter)) {
         url_rule_t *rule = (url_rule_t *)hash_iterate_next(filter->rules, iter);
         if (rule && rule->id == rule_id) {
-            hash_remove(filter->rules, rule);
+            char key[512];
+            snprintf(key, sizeof(key), "%s:%u", rule->pattern, rule->id);
+            void *old_key = hash_remove(filter->rules, key);
+            ngfw_free(old_key);
             ngfw_free(rule);
+            ngfw_free(iter);
             return NGFW_OK;
         }
     }
     
+    ngfw_free(iter);
     return NGFW_ERR;
 }
 
@@ -126,7 +157,7 @@ ngfw_ret_t urlfilter_clear_rules(urlfilter_t *filter)
     
     if (filter->rules) {
         hash_destroy(filter->rules);
-        filter->rules = hash_create(128, url_hash, url_match, NULL);
+        filter->rules = hash_create(128, url_hash, url_match, url_rule_destroy);
     }
     
     return NGFW_OK;
@@ -136,7 +167,11 @@ ngfw_ret_t urlfilter_add_dns_rule(urlfilter_t *filter, dns_rule_t *rule)
 {
     if (!filter || !rule) return NGFW_ERR_INVALID;
     
-    hash_insert(filter->dns_rules, rule->domain, rule);
+    dns_rule_t *copy = ngfw_malloc(sizeof(dns_rule_t));
+    if (!copy) return NGFW_ERR_NO_MEM;
+    *copy = *rule;
+    
+    hash_insert(filter->dns_rules, copy->domain, copy);
     
     if (rule->block) {
         suffix_tree_add(filter->suffix_tree, rule->domain, rule->category);
@@ -150,15 +185,19 @@ ngfw_ret_t urlfilter_del_dns_rule(urlfilter_t *filter, u32 rule_id)
     if (!filter) return NGFW_ERR_INVALID;
     
     void **iter = hash_iterate_start(filter->dns_rules);
+    if (!iter) return NGFW_ERR;
+    
     while (hash_iterate_has_next(iter)) {
         dns_rule_t *rule = (dns_rule_t *)hash_iterate_next(filter->dns_rules, iter);
         if (rule && rule->id == rule_id) {
-            hash_remove(filter->dns_rules, rule);
+            hash_remove(filter->dns_rules, rule->domain);
             ngfw_free(rule);
+            ngfw_free(iter);
             return NGFW_OK;
         }
     }
     
+    ngfw_free(iter);
     return NGFW_ERR;
 }
 
@@ -252,7 +291,17 @@ ngfw_ret_t urlfilter_load_blocklist(urlfilter_t *filter, const char *filename)
         
         url_rule_t rule = {0};
         rule.id = rule_id++;
-        snprintf(rule.pattern, sizeof(rule.pattern), "%s", line);
+        {
+            /* Read first 255 chars of line as pattern, truncating if needed */
+            const char *src = line;
+            char *dst = rule.pattern;
+            size_t remain = sizeof(rule.pattern) - 1;
+            while (remain > 0 && *src && *src != '\n') {
+                *dst++ = *src++;
+                remain--;
+            }
+            *dst = '\0';
+        }
         rule.category = URL_CATEGORY_MALWARE;
         rule.allow = false;
         rule.enabled = true;
@@ -352,12 +401,6 @@ ngfw_ret_t urlfilter_load_db(urlfilter_t *filter, const char *filename)
     return NGFW_OK;
 }
 
-int urlfilter_check(urlfilter_t *filter, const char *url)
-{
-    bool blocked = false;
-    urlfilter_check_domain(filter, url, &blocked);
-    return blocked ? 1 : 0;
-}
 
 domain_suffix_tree_t *suffix_tree_create(void)
 {

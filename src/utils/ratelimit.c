@@ -15,6 +15,7 @@
 
 #include "ngfw/ratelimit.h"
 #include "ngfw/memory.h"
+#include "ngfw/log.h"
 #include "ngfw/platform.h"
 #include "ngfw/hash.h"
 #include <stddef.h>
@@ -99,8 +100,8 @@ void ratelimiter_set_burst(ratelimiter_t *rl, u32 burst)
 
 static u32 hash_ip(const void *key, u32 size)
 {
-    (void)size;
-    return (u32)(uintptr_t)key;
+    if (size == 0) return 0;
+    return (u32)(uintptr_t)key % size;
 }
 
 static bool equal_ip(const void *a, const void *b)
@@ -192,8 +193,27 @@ bool ratelimit_table_check(ratelimit_table_t *table, u32 ip)
 
 void ratelimit_table_cleanup(ratelimit_table_t *table, u64 now)
 {
-    (void)now;
-    if (!table) return;
+    if (!table || !table->hash) return;
+
+    void **iter = hash_iterate_start(table->hash);
+    if (!iter) return;
+
+    u32 cleanup_count = 0;
+    while (hash_iterate_has_next(iter)) {
+        ratelimit_entry_t *entry = (ratelimit_entry_t *)hash_iterate_next(table->hash, iter);
+        if (entry && now - entry->last_update > 300000) {
+            /* Remove entries older than 5 minutes */
+            hash_remove(table->hash, (const void *)(uintptr_t)entry->ip);
+            ngfw_free(entry);
+            cleanup_count++;
+        }
+    }
+
+    ngfw_free(iter);
+    
+    if (cleanup_count > 0) {
+        log_debug("Ratelimit cleanup: removed %u stale entries", cleanup_count);
+    }
 }
 
 u32 ratelimit_table_count(ratelimit_table_t *table)

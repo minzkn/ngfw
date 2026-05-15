@@ -20,6 +20,8 @@
 #include "ngfw/log.h"
 #include "ngfw/crypto.h"
 #include "ngfw/platform.h"
+#include "ngfw/executil.h"
+#include "ngfw/patmatch.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -30,6 +32,7 @@
 
 typedef struct ips_signature_impl {
     ips_signature_t sig;
+    patmatch_ctx_t *match_ctx;
     struct ips_signature_impl *next;
 } ips_signature_impl_t;
 
@@ -60,6 +63,10 @@ static bool sig_match(const void *key1, const void *key2)
 {
     return (*(const u32 *)key1) == (*(const u32 *)key2);
 }
+
+static u32 blocked_ip_hash(const void *key, u32 size);
+static bool blocked_ip_match(const void *key1, const void *key2);
+static void blocked_ip_destroy(void *key, void *value);
 
 static void load_default_signatures(ips_t *ips)
 {
@@ -113,6 +120,18 @@ ips_t *ips_create(void)
     ips->alert_tail = NULL;
     ips->next_alert_id = 1;
 
+    ips->blocked_ips = hash_create(1024, blocked_ip_hash, blocked_ip_match, blocked_ip_destroy);
+    if (!ips->blocked_ips) {
+        hash_destroy(ips->signatures);
+        ngfw_free(ips);
+        return NULL;
+    }
+
+    ips->severity_actions[IPS_SEVERITY_LOW] = IPS_ACTION_ALERT;
+    ips->severity_actions[IPS_SEVERITY_MEDIUM] = IPS_ACTION_ALERT;
+    ips->severity_actions[IPS_SEVERITY_HIGH] = IPS_ACTION_DROP;
+    ips->severity_actions[IPS_SEVERITY_CRITICAL] = IPS_ACTION_DROP;
+
     load_default_signatures(ips);
 
     log_info("IPS created with default signatures");
@@ -131,6 +150,7 @@ void ips_destroy(ips_t *ips)
     ips_signature_impl_t *sig = ips->sig_list;
     while (sig) {
         ips_signature_impl_t *next = sig->next;
+        if (sig->match_ctx) patmatch_destroy(sig->match_ctx);
         ngfw_free(sig);
         sig = next;
     }
@@ -140,6 +160,10 @@ void ips_destroy(ips_t *ips)
         ips_alert_impl_t *next = alert->next;
         ngfw_free(alert);
         alert = next;
+    }
+
+    if (ips->blocked_ips) {
+        hash_destroy(ips->blocked_ips);
     }
 
     ngfw_free(ips);
@@ -188,10 +212,21 @@ ngfw_ret_t ips_add_signature(ips_t *ips, ips_signature_t *sig)
     impl->sig = *sig;
     impl->next = NULL;
 
-    hash_insert(ips->signatures, &sig->id, impl);
+    /* Compile the pattern for fast BMH matching */
+    u32 pat_type = PATMATCH_EXACT;
+    const char *p = sig->pattern;
+    while (*p) {
+        if (*p == '*' || *p == '?') { pat_type = PATMATCH_WILDCARD; break; }
+        p++;
+    }
+    impl->match_ctx = patmatch_compile((const u8 *)sig->pattern,
+                                        (u32)strlen(sig->pattern),
+                                        pat_type, false);
 
     impl->next = ips->sig_list;
     ips->sig_list = impl;
+
+    hash_insert(ips->signatures, &impl->sig.id, impl);
 
     ips->stats.signatures_loaded++;
     if (sig->enabled) {
@@ -354,7 +389,13 @@ ngfw_ret_t ips_check_packet(ips_t *ips, packet_t *pkt, ips_alert_t *alert)
         }
 
         if (data_len > 0) {
-            if (pattern_match(sig->sig.pattern, (const char*)data, data_len)) {
+            bool matched = false;
+            if (sig->match_ctx) {
+                matched = (patmatch_find(sig->match_ctx, data, data_len) >= 0);
+            } else {
+                matched = (pattern_match(sig->sig.pattern, (const char*)data, data_len) != 0);
+            }
+            if (matched) {
                 ips->stats.matches++;
                 ips->stats.total_alerts++;
 
@@ -368,12 +409,13 @@ ngfw_ret_t ips_check_packet(ips_t *ips, packet_t *pkt, ips_alert_t *alert)
                 if (alert) {
                     alert->id = ips->next_alert_id++;
                     alert->signature_id = sig->sig.id;
-                    strncpy(alert->signature_name, sig->sig.name, sizeof(alert->signature_name) - 1);
+                    alert->signature_name[0] = '\0';
+                    snprintf(alert->signature_name, sizeof(alert->signature_name), "%s", sig->sig.name);
                     alert->severity = sig->sig.severity;
                     alert->classification = sig->sig.classification;
                     alert->timestamp = get_ms_time();
                     snprintf(alert->message, sizeof(alert->message),
-                             "%s - %s", sig->sig.name, sig->sig.description);
+                             "%.200s - %.250s", sig->sig.name, sig->sig.description);
 
                     ips_alert_impl_t *impl = ngfw_malloc(sizeof(ips_alert_impl_t));
                     if (impl) {
@@ -570,6 +612,12 @@ static bool blocked_ip_match(const void *key1, const void *key2)
     return (*(const u32 *)key1) == (*(const u32 *)key2);
 }
 
+static void blocked_ip_destroy(void *key, void *value)
+{
+    ngfw_free(key);
+    ngfw_free(value);
+}
+
 ngfw_ret_t ips_block_ip(ips_t *ips, u32 ip, u32 duration_sec)
 {
     if (!ips || ip == 0) return NGFW_ERR_INVALID;
@@ -580,19 +628,31 @@ ngfw_ret_t ips_block_ip(ips_t *ips, u32 ip, u32 duration_sec)
     entry->ip = ip;
     entry->blocked_at = get_ms_time();
     entry->duration_sec = duration_sec;
-    
-    hash_insert(ips->blocked_ips, &ip, entry);
+
+    u32 *key = ngfw_malloc(sizeof(u32));
+    if (!key) {
+        ngfw_free(entry);
+        return NGFW_ERR_NO_MEM;
+    }
+    *key = ip;
+    hash_insert(ips->blocked_ips, key, entry);
     
     log_warn("IPS: Blocked IP %u.%u.%u.%u for %u seconds",
              (ip >> 24) & 0xFF, (ip >> 16) & 0xFF,
              (ip >> 8) & 0xFF, ip & 0xFF, duration_sec);
-    
-    char cmd[128];
-    snprintf(cmd, sizeof(cmd), "iptables -I INPUT -s %u.%u.%u.%u -j DROP 2>/dev/null",
+
+    /* Sync block to kernel via safe exec (no shell injection) */
+    char ip_str[16];
+    snprintf(ip_str, sizeof(ip_str), "%u.%u.%u.%u",
              (ip >> 24) & 0xFF, (ip >> 16) & 0xFF,
              (ip >> 8) & 0xFF, ip & 0xFF);
-    { int r = system(cmd); (void)r; }
-    
+
+    char rule_str[64];
+    snprintf(rule_str, sizeof(rule_str), "-s %s -j DROP", ip_str);
+
+    char *argv[] = {"iptables", "-I", "INPUT", "-s", ip_str, "-j", "DROP", NULL};
+    { int r = safe_exec("iptables", argv, 5); (void)r; }
+
     return NGFW_OK;
 }
 
@@ -605,13 +665,15 @@ ngfw_ret_t ips_unblock_ip(ips_t *ips, u32 ip)
     log_info("IPS: Unblocked IP %u.%u.%u.%u",
              (ip >> 24) & 0xFF, (ip >> 16) & 0xFF,
              (ip >> 8) & 0xFF, ip & 0xFF);
-    
-    char cmd[128];
-    snprintf(cmd, sizeof(cmd), "iptables -D INPUT -s %u.%u.%u.%u -j DROP 2>/dev/null",
+
+    char ip_str[16];
+    snprintf(ip_str, sizeof(ip_str), "%u.%u.%u.%u",
              (ip >> 24) & 0xFF, (ip >> 16) & 0xFF,
              (ip >> 8) & 0xFF, ip & 0xFF);
-    { int r = system(cmd); (void)r; }
-    
+
+    char *argv[] = {"iptables", "-D", "INPUT", "-s", ip_str, "-j", "DROP", NULL};
+    { int r = safe_exec("iptables", argv, 5); (void)r; }
+
     return NGFW_OK;
 }
 
@@ -619,9 +681,26 @@ ngfw_ret_t ips_get_blocked_ips(ips_t *ips, u32 **ips_list, u32 *count)
 {
     if (!ips || !ips_list || !count) return NGFW_ERR_INVALID;
     
-    *ips_list = NULL;
-    *count = 0;
+    u32 total = hash_size(ips->blocked_ips);
+    if (total == 0) {
+        *ips_list = NULL;
+        *count = 0;
+        return NGFW_OK;
+    }
     
+    *ips_list = ngfw_malloc(total * sizeof(u32));
+    if (!*ips_list) return NGFW_ERR_NO_MEM;
+    
+    u32 i = 0;
+    void **iter = hash_iterate_start(ips->blocked_ips);
+    while (hash_iterate_has_next(iter)) {
+        blocked_ip_entry_t *entry = (blocked_ip_entry_t *)hash_iterate_next(ips->blocked_ips, iter);
+        if (entry) {
+            (*ips_list)[i++] = entry->ip;
+        }
+    }
+    
+    *count = i;
     return NGFW_OK;
 }
 

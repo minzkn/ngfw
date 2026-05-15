@@ -36,6 +36,9 @@
 #define NGFW_ERR_NOT_FOUND -7
 #define NGFW_ERR_EXISTS -8
 #define NGFW_ERR_PERM -9
+#define NGFW_ERR_INTEGRITY -10
+#define NGFW_ERR_EXPIRED -11
+#define NGFW_ERR_REPLAY -12
 
 typedef int32_t ngfw_ret_t;
 typedef uint8_t u8;
@@ -46,6 +49,11 @@ typedef int8_t s8;
 typedef int16_t s16;
 typedef int32_t s32;
 typedef int64_t s64;
+
+/* Atomic reference counter for safe memory management */
+typedef struct {
+    volatile s32 count;
+} refcount_t;
 
 #ifndef TRUE
 #define TRUE 1
@@ -64,5 +72,31 @@ typedef int64_t s64;
 #define NGFW_MAX_RULES 65536
 #define NGFW_PACKET_SIZE 65536
 #define NGFW_BUFFER_SIZE 4096
+
+/* Reference counting helpers */
+static inline void refcount_init(refcount_t *ref, s32 value)
+{
+    ref->count = value;
+}
+
+static inline s32 refcount_read(refcount_t *ref)
+{
+    return __atomic_load_n(&ref->count, __ATOMIC_SEQ_CST);
+}
+
+static inline void refcount_inc(refcount_t *ref)
+{
+    __atomic_fetch_add(&ref->count, 1, __ATOMIC_SEQ_CST);
+}
+
+static inline bool refcount_dec_and_test(refcount_t *ref)
+{
+    return __atomic_fetch_sub(&ref->count, 1, __ATOMIC_SEQ_CST) == 1;
+}
+
+static inline bool refcount_dec_and_zero(refcount_t *ref)
+{
+    return __atomic_fetch_sub(&ref->count, 1, __ATOMIC_SEQ_CST) <= 1;
+}
 
 #endif

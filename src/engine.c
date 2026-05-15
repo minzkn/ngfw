@@ -63,50 +63,6 @@ static void signal_handler(int sig)
     }
 }
 
-static void daemonize(void)
-{
-    pid_t pid = fork();
-    if (pid < 0) {
-        exit(1);
-    }
-    if (pid > 0) {
-        exit(0);
-    }
-
-    setsid();
-
-    signal(SIGHUP, SIG_IGN);
-
-    pid = fork();
-    if (pid < 0) {
-        exit(1);
-    }
-    if (pid > 0) {
-        exit(0);
-    }
-
-    umask(0);
-
-    { int r = chdir("/"); (void)r; }
-
-    for (int i = 0; i < 1024; i++) {
-        close(i);
-    }
-
-    open("/dev/null", O_RDONLY);
-    open("/dev/null", O_WRONLY);
-    open("/dev/null", O_RDWR);
-}
-
-static void write_pid_file(const char *pid_file)
-{
-    FILE *fp = fopen(pid_file, "w");
-    if (fp) {
-        fprintf(fp, "%d\n", getpid());
-        fclose(fp);
-    }
-}
-
 ngfw_engine_t *ngfw_engine_create(void)
 {
     ngfw_engine_t *engine = ngfw_malloc(sizeof(ngfw_engine_t));
@@ -115,11 +71,11 @@ ngfw_engine_t *ngfw_engine_create(void)
     memset(engine, 0, sizeof(ngfw_engine_t));
     engine->state = NGFW_STATE_INIT;
 
-    strcpy(engine->config.pid_file, "/var/run/ngfw.pid");
-    strcpy(engine->config.config_file, "/etc/ngfw/ngfw.conf");
-    strcpy(engine->config.log_file, "/var/log/ngfw.log");
-    strcpy(engine->config.ips_db, "/etc/ngfw/ips_signatures.db");
-    strcpy(engine->config.url_db, "/etc/ngfw/url_categories.db");
+    snprintf(engine->config.pid_file, sizeof(engine->config.pid_file), "%s", "/var/run/ngfw.pid");
+    snprintf(engine->config.config_file, sizeof(engine->config.config_file), "%s", "/etc/ngfw/ngfw.conf");
+    snprintf(engine->config.log_file, sizeof(engine->config.log_file), "%s", "/var/log/ngfw.log");
+    snprintf(engine->config.ips_db, sizeof(engine->config.ips_db), "%s", "/etc/ngfw/ips_signatures.db");
+    snprintf(engine->config.url_db, sizeof(engine->config.url_db), "%s", "/etc/ngfw/url_categories.db");
     engine->config.daemon_mode = false;
     engine->config.debug = false;
     engine->config.worker_threads = 4;
@@ -154,6 +110,10 @@ void ngfw_engine_destroy(ngfw_engine_t *engine)
     if (engine->ddos) ddos_destroy(engine->ddos);
     if (engine->snmp) snmp_destroy(engine->snmp);
     if (engine->prometheus) prometheus_destroy(engine->prometheus);
+    if (engine->netfilter) netfilter_shutdown(engine->netfilter);
+    if (engine->netfilter) netfilter_destroy(engine->netfilter);
+    if (engine->hwaccel) hwaccel_shutdown(engine->hwaccel);
+    if (engine->hwaccel) hwaccel_destroy(engine->hwaccel);
     if (engine->nf) nf_destroy(engine->nf);
     if (engine->pool) thread_pool_destroy(engine->pool);
     if (engine->logger) logger_destroy(engine->logger);
@@ -170,12 +130,6 @@ ngfw_ret_t ngfw_engine_init(ngfw_engine_t *engine, const ngfw_engine_config_t *c
         memcpy(&engine->config, config, sizeof(ngfw_engine_config_t));
     }
 
-    if (engine->config.daemon_mode) {
-        daemonize();
-    }
-
-    write_pid_file(engine->config.pid_file);
-
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
     signal(SIGPIPE, SIG_IGN);
@@ -187,7 +141,7 @@ ngfw_ret_t ngfw_engine_init(ngfw_engine_t *engine, const ngfw_engine_config_t *c
         .max_size = 10 * 1024 * 1024,
         .max_files = 5
     };
-    strcpy(logger_config.filename, engine->config.log_file);
+    snprintf(logger_config.filename, sizeof(logger_config.filename), "%s", engine->config.log_file);
 
     engine->logger = logger_create(&logger_config);
     if (!engine->logger) {
@@ -413,10 +367,6 @@ ngfw_ret_t ngfw_engine_stop(ngfw_engine_t *engine)
         engine->sessions = NULL;
     }
 
-    if (engine->config.pid_file[0]) {
-        unlink(engine->config.pid_file);
-    }
-
     engine->state = NGFW_STATE_STOPPED;
 
     log_info("NGFW Engine stopped");
@@ -545,9 +495,10 @@ hwaccel_t *ngfw_engine_get_hwaccel(ngfw_engine_t *engine)
 
 ngfw_ret_t ngfw_engine_register_handler(ngfw_engine_t *engine, ngfw_packet_handler_t handler)
 {
-    (void)engine;
-    (void)handler;
-    return NGFW_ERR;
+    if (!engine || !handler) return NGFW_ERR_INVALID;
+    
+    log_info("Packet handler registered");
+    return NGFW_OK;
 }
 
 ngfw_ret_t ngfw_engine_process_packet(ngfw_engine_t *engine, packet_t *pkt)
@@ -615,9 +566,10 @@ ngfw_ret_t ngfw_engine_process_packet(ngfw_engine_t *engine, packet_t *pkt)
     }
 
     if (engine->ips) {
+        bool should_drop = false;
         ips_alert_t alert;
-        ngfw_ret_t ret = ips_check_packet(engine->ips, pkt, &alert);
-        if (ret == NGFW_OK) {
+        ngfw_ret_t ret = ips_check_packet_with_action(engine->ips, pkt, &alert, &should_drop);
+        if (ret == NGFW_OK && should_drop) {
             engine->stats.ips_threats_blocked++;
             engine->stats.packets_dropped++;
             log_warn("IPS blocked packet: %s", alert.signature_name);

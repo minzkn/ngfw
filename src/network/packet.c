@@ -36,6 +36,9 @@ packet_t *packet_create(u32 capacity)
     pkt->ifindex_out = 0;
     pkt->timestamp = 0;
     pkt->direction = PKT_DIR_IN;
+    pkt->is_esp = false;
+    pkt->tunnel_id = 0;
+    pkt->allocated = true;
     
     return pkt;
 }

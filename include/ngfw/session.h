@@ -1,6 +1,3 @@
-#ifndef NGFW_SESSION_H
-#define NGFW_SESSION_H
-
 /*
  * NGFW - Next-Generation Firewall
  * Copyright (C) 2024 NGFW Project
@@ -16,9 +13,14 @@
  * GNU General Public License for more details.
  */
 
+#ifndef NGFW_SESSION_H
+#define NGFW_SESSION_H
+
 #include "types.h"
 #include "packet.h"
 #include "hash.h"
+#include "percpu.h"
+#include <pthread.h>
 
 typedef enum {
     SESSION_STATE_NEW,
@@ -48,6 +50,7 @@ typedef struct session {
     u32 ifindex_in;
     u32 ifindex_out;
     void *data;
+    refcount_t refcnt;  /* Reference counter for safe memory management */
 } session_t;
 
 typedef struct session_table {
@@ -68,6 +71,19 @@ session_t *session_create(const session_key_t *key);
 void session_destroy(session_t *session);
 void session_update(session_t *session, packet_t *pkt);
 bool session_expired(session_t *session, u64 now);
+
+/* Reference counting for safe concurrent access */
+static inline void session_get(session_t *session)
+{
+    if (session) refcount_inc(&session->refcnt);
+}
+
+static inline void session_put(session_t *session)
+{
+    if (session && refcount_dec_and_zero(&session->refcnt)) {
+        session_destroy(session);
+    }
+}
 
 u32 session_key_hash(const void *key, u32 size);
 bool session_key_equal(const void *a, const void *b);

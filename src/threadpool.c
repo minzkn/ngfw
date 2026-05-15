@@ -57,6 +57,7 @@ static void *worker_routine(void *arg)
         task->complete_time = get_us_time();
 
         __atomic_fetch_add(&pool->tasks_completed, 1, __ATOMIC_SEQ_CST);
+        ngfw_free(task);
     }
 
     return NULL;
@@ -93,10 +94,6 @@ void thread_pool_destroy(thread_pool_t *pool)
 
     if (pool->initialized) {
         thread_pool_shutdown(pool);
-    }
-
-    for (u32 i = 0; i < pool->num_workers; i++) {
-        ngfw_free(&pool->workers[i]);
     }
 
     ngfw_free(pool->workers);
@@ -167,14 +164,17 @@ ngfw_ret_t thread_pool_submit(thread_pool_t *pool, task_t *task)
 
 ngfw_ret_t thread_pool_submit_fn(thread_pool_t *pool, void (*fn)(void *), void *arg)
 {
-    task_t task = {
-        .function = fn,
-        .argument = arg,
-        .priority = TASK_PRIORITY_NORMAL,
-        .submit_time = get_us_time()
-    };
+    task_t *task = ngfw_malloc(sizeof(task_t));
+    if (!task) return NGFW_ERR_NO_MEM;
 
-    return thread_pool_submit(pool, &task);
+    task->function = fn;
+    task->argument = arg;
+    task->priority = TASK_PRIORITY_NORMAL;
+    task->submit_time = get_us_time();
+    task->start_time = 0;
+    task->complete_time = 0;
+
+    return thread_pool_submit(pool, task);
 }
 
 ngfw_ret_t thread_pool_wait(task_t *task)

@@ -14,6 +14,7 @@
  */
 
 #include "ngfw/crypto.h"
+#include <string.h>
 
 static const u32 K[64] = {
     0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
@@ -45,7 +46,7 @@ void sha256_init(sha256_context_t *ctx)
     ctx->state[6] = 0x1f83d9ab;
     ctx->state[7] = 0x5be0cd19;
     ctx->bitcount = 0;
-    ctx->buffer[0] = 0;
+    memset(ctx->buffer, 0, sizeof(ctx->buffer));
 }
 
 static void sha256_transform(sha256_context_t *ctx)
@@ -97,7 +98,7 @@ void sha256_update(sha256_context_t *ctx, const u8 *data, u32 len)
     ctx->bitcount += len * 8;
     
     for (u32 i = 0; i < len; i++) {
-        ctx->buffer[idx++] ^= data[i];
+        ctx->buffer[idx++] = data[i];
         if (idx == 64) {
             sha256_transform(ctx);
             idx = 0;

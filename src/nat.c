@@ -57,6 +57,12 @@ static u64 create_nat_key(u32 src_ip, u32 dst_ip, u16 src_port, u16 dst_port, u8
     return ((u64)src_ip << 32) | ((u64)dst_ip << 16) | ((u64)src_port << 8) | proto;
 }
 
+static void nat_mapping_destroy(void *key, void *value)
+{
+    ngfw_free(key);
+    ngfw_free(value);
+}
+
 nat_t *nat_create(void)
 {
     nat_t *nat = ngfw_malloc(sizeof(nat_t));
@@ -64,8 +70,8 @@ nat_t *nat_create(void)
 
     memset(nat, 0, sizeof(nat_t));
 
-    nat->rules = hash_create(256, NULL, NULL, NULL);
-    nat->mappings = hash_create(8192, nat_mapping_hash, nat_mapping_match, NULL);
+    nat->rules = hash_create(256, hash_int, equal_int, NULL);
+    nat->mappings = hash_create(8192, nat_mapping_hash, nat_mapping_match, nat_mapping_destroy);
 
     if (!nat->rules || !nat->mappings) {
         if (nat->rules) hash_destroy(nat->rules);
@@ -268,7 +274,7 @@ ngfw_ret_t nat_translate_packet(nat_t *nat, packet_t *pkt, nat_entry_t *entry)
     }
 
     memset(entry, 0, sizeof(nat_entry_t));
-    entry->id = (u32)(uintptr_t)(nat->mappings->count + 1);
+    entry->id = hash_size(nat->mappings) + 1;
     entry->original_src_ip = src_ip;
     entry->original_dst_ip = dst_ip;
     entry->original_src_port = src_port;
@@ -329,8 +335,18 @@ ngfw_ret_t nat_translate_packet(nat_t *nat, packet_t *pkt, nat_entry_t *entry)
         nat->stats.packets_translated++;
         nat->stats.bytes_translated += pkt->len;
 
-        u64 key = create_nat_key(src_ip, dst_ip, src_port, dst_port, proto);
-        hash_insert(nat->mappings, &key, entry);
+        u64 *key = ngfw_malloc(sizeof(u64));
+        if (!key) return NGFW_ERR_NO_MEM;
+        *key = create_nat_key(src_ip, dst_ip, src_port, dst_port, proto);
+
+        nat_entry_t *persistent_entry = ngfw_malloc(sizeof(nat_entry_t));
+        if (!persistent_entry) {
+            ngfw_free(key);
+            return NGFW_ERR_NO_MEM;
+        }
+        *persistent_entry = *entry;
+
+        hash_insert(nat->mappings, key, persistent_entry);
     }
 
     return NGFW_OK;
@@ -369,15 +385,21 @@ ngfw_ret_t nat_delete_mapping(nat_t *nat, u32 entry_id)
     if (!nat) return NGFW_ERR_INVALID;
     
     void **iter = hash_iterate_start(nat->mappings);
+    if (!iter) return NGFW_ERR;
+    
     while (hash_iterate_has_next(iter)) {
         nat_entry_t *entry = (nat_entry_t *)hash_iterate_next(nat->mappings, iter);
         if (entry && entry->id == entry_id) {
-            hash_remove(nat->mappings, entry);
+            u64 key = create_nat_key(entry->original_src_ip, entry->original_dst_ip,
+                                     entry->original_src_port, entry->original_dst_port, entry->protocol);
+            hash_remove(nat->mappings, &key);
             ngfw_free(entry);
+            ngfw_free(iter);
             return NGFW_OK;
         }
     }
     
+    ngfw_free(iter);
     return NGFW_ERR;
 }
 

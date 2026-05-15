@@ -127,10 +127,8 @@ ngfw_ret_t config_get_value(config_t *config, const char *path, config_value_t *
         subpath = dot + 1;
     }
     
-    if (!config->root.keys) return NGFW_ERR;
-    
     for (u32 i = 0; i < config->root.count; i++) {
-        if (config->root.keys[i] && strcmp(config->root.keys[i], key) == 0) {
+        if (config->root.keys && config->root.keys[i] && strcmp(config->root.keys[i], key) == 0) {
             if (subpath && config->root.values[i].type == CONFIG_TYPE_OBJECT && config->root.values[i].value.obj) {
                 config_object_t *obj = config->root.values[i].value.obj;
                 for (u32 j = 0; j < obj->count; j++) {
@@ -147,6 +145,8 @@ ngfw_ret_t config_get_value(config_t *config, const char *path, config_value_t *
     
     return NGFW_ERR;
 }
+
+static ngfw_ret_t config_add_entry(config_object_t *obj, const char *key, config_value_t *value);
 
 ngfw_ret_t config_set_value(config_t *config, const char *path, config_value_t *value)
 {
@@ -165,10 +165,8 @@ ngfw_ret_t config_set_value(config_t *config, const char *path, config_value_t *
         subpath = dot + 1;
     }
     
-    if (!config->root.keys) return NGFW_ERR;
-    
     for (u32 i = 0; i < config->root.count; i++) {
-        if (config->root.keys[i] && strcmp(config->root.keys[i], key) == 0) {
+        if (config->root.keys && config->root.keys[i] && strcmp(config->root.keys[i], key) == 0) {
             if (subpath && config->root.values[i].type == CONFIG_TYPE_OBJECT && config->root.values[i].value.obj) {
                 config_object_t *obj = config->root.values[i].value.obj;
                 for (u32 j = 0; j < obj->count; j++) {
@@ -183,7 +181,8 @@ ngfw_ret_t config_set_value(config_t *config, const char *path, config_value_t *
         }
     }
     
-    return NGFW_ERR;
+    /* Key not found - add new entry */
+    return config_add_entry(&config->root, key, value);
 }
 
 ngfw_ret_t config_to_ngfw_config(config_t *config, ngfw_config_t *ngfw_config)
@@ -288,7 +287,7 @@ ngfw_ret_t config_parse_file(config_t *config, const char *filename)
     FILE *fp = fopen(filename, "r");
     if (!fp) {
         log_warn("Config file not found: %s, using defaults", filename);
-        return config_to_ngfw_config(config, (ngfw_config_t *)config);
+        return NGFW_OK;
     }
 
     char *line;
@@ -335,9 +334,85 @@ ngfw_ret_t config_parse_json(config_t *config, const char *json)
 {
     if (!config || !json) return NGFW_ERR_INVALID;
     
-    (void)config;
-    (void)json;
-    return NGFW_ERR;
+    /* Simple JSON parser for flat key:value objects */
+    const char *p = json;
+    while (*p) {
+        /* Skip whitespace and structural chars */
+        while (*p && (*p == '{' || *p == '}' || *p == ' ' || *p == '\n' || *p == '\r' || *p == '\t' || *p == ',')) {
+            p++;
+        }
+        if (!*p) break;
+        
+        /* Parse key string */
+        if (*p != '"') return NGFW_ERR;
+        p++;
+        const char *key_start = p;
+        while (*p && *p != '"') p++;
+        if (!*p) return NGFW_ERR;
+        
+        size_t key_len = p - key_start;
+        p++; /* skip closing quote */
+        
+        /* Skip colon */
+        while (*p && (*p == ' ' || *p == ':')) p++;
+        if (!*p) return NGFW_ERR;
+        
+        /* Parse value */
+        config_value_t val;
+        memset(&val, 0, sizeof(val));
+        
+        if (*p == '"') {
+            /* String value */
+            p++;
+            const char *val_start = p;
+            while (*p && *p != '"') p++;
+            if (!*p) return NGFW_ERR;
+            
+            char key_buf[256];
+            size_t copy_len = key_len < sizeof(key_buf) - 1 ? key_len : sizeof(key_buf) - 1;
+            memcpy(key_buf, key_start, copy_len);
+            key_buf[copy_len] = '\0';
+            
+            val.type = CONFIG_TYPE_STRING;
+            val.value.str = strndup(val_start, p - val_start);
+            config_add_entry(&config->root, key_buf, &val);
+            p++;
+        } else if (*p == 't' || *p == 'f') {
+            /* Boolean value */
+            bool bval = (*p == 't');
+            while (*p && *p != ',' && *p != '}' && *p != ' ') p++;
+            
+            char key_buf[256];
+            size_t copy_len = key_len < sizeof(key_buf) - 1 ? key_len : sizeof(key_buf) - 1;
+            memcpy(key_buf, key_start, copy_len);
+            key_buf[copy_len] = '\0';
+            
+            val.type = CONFIG_TYPE_BOOL;
+            val.value.boolean = bval;
+            config_add_entry(&config->root, key_buf, &val);
+        } else if (*p == '-' || (*p >= '0' && *p <= '9')) {
+            /* Numeric value */
+            char num_buf[32];
+            int num_idx = 0;
+            while (*p && *p != ',' && *p != '}' && *p != ' ' && num_idx < 31) {
+                num_buf[num_idx++] = *p++;
+            }
+            num_buf[num_idx] = '\0';
+            
+            char key_buf[256];
+            size_t copy_len = key_len < sizeof(key_buf) - 1 ? key_len : sizeof(key_buf) - 1;
+            memcpy(key_buf, key_start, copy_len);
+            key_buf[copy_len] = '\0';
+            
+            val.type = CONFIG_TYPE_INT;
+            val.value.num = atoi(num_buf);
+            config_add_entry(&config->root, key_buf, &val);
+        } else {
+            return NGFW_ERR;
+        }
+    }
+    
+    return NGFW_OK;
 }
 
 ngfw_ret_t config_load_default(ngfw_config_t *config)

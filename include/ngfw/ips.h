@@ -1,6 +1,3 @@
-#ifndef NGFW_IPS_H
-#define NGFW_IPS_H
-
 /*
  * NGFW - Next-Generation Firewall
  * Copyright (C) 2024 NGFW Project
@@ -15,6 +12,9 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
  */
+
+#ifndef NGFW_IPS_H
+#define NGFW_IPS_H
 
 #include "types.h"
 #include "packet.h"

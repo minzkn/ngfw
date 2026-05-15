@@ -49,7 +49,8 @@ CFLAGS += -DENABLE_ANTIVIRUS=$(ENABLE_ANTIVIRUS) -DENABLE_QOS=$(ENABLE_QOS)
 
 # Source files
 CORE_SRCS = src/core/memory.c src/core/list.c src/core/hash.c src/core/log.c \
-            src/core/timer.c src/core/spinlock.c src/core/bitmap.c
+            src/core/timer.c src/core/spinlock.c src/core/bitmap.c src/core/percpu.c \
+            src/core/slab_alloc.c
 
 NETWORK_SRCS = src/network/packet.c src/network/interface.c src/network/ip.c \
                 src/network/tcp.c src/network/udp.c src/network/icmp.c
@@ -61,14 +62,15 @@ SECURITY_SRCS = src/security/session.c src/security/filter.c src/security/urlfil
 
 PLATFORM_SRCS = src/platform/cpu.c src/platform/thread.c
 
-NF_SRCS = src/nf/nf.c
+NF_SRCS = src/nf/nf.c src/nf/nfnetlink.c
 
 UTILS_SRCS = src/utils/module.c src/utils/mempool.c src/utils/plugin.c \
               src/utils/ringbuffer.c src/utils/ratelimit.c src/utils/connpool.c \
               src/utils/bloom.c src/utils/lrucache.c src/utils/skiplist.c \
               src/utils/asynclog.c src/utils/ipv6.c src/utils/metrics.c \
               src/utils/strutil.c src/utils/timerwheel.c \
-              src/utils/packet_alloc.c src/utils/protocols.c src/utils/notify.c
+              src/utils/packet_alloc.c src/utils/protocols.c src/utils/notify.c \
+              src/utils/executil.c src/utils/patmatch.c
 
 SERVICES_SRCS = src/services/config.c src/services/config_hotreload.c \
                  src/services/logger.c src/services/event.c src/services/ipc.c \
@@ -77,7 +79,7 @@ SERVICES_SRCS = src/services/config.c src/services/config_hotreload.c \
                  src/services/capture.c src/services/logdb.c src/services/snmp.c \
                  src/services/prometheus.c
 
-VPN_SRCS = src/vpn.c
+VPN_SRCS = src/vpn.c src/vpn/vpn_data.c
 
 IPS_SRCS = src/ips.c
 
@@ -124,9 +126,13 @@ HWACCEL_OBJS = $(HWACCEL_SRCS:.c=.o)
 ENGINE_OBJS = $(ENGINE_SRCS:.c=.o)
 
 # DPDK is optional
-DPDK_OBJS =
+ifeq ($(ENABLE_DPDK),1)
+    DPDK_OBJS = $(DPDK_SRCS:.c=.o)
+else
+    DPDK_OBJS =
+endif
 
-OBJS = $(CORE_OBJS) $(NETWORK_OBJS) $(CRYPTO_OBJS) $(SECURITY_OBJS) $(PLATFORM_OBJS) $(NF_OBJS) $(UTILS_OBJS) $(SERVICES_OBJS) $(VPN_OBJS) $(IPS_OBJS) $(ANTIVIRUS_OBJS) $(NAT_OBJS) $(DDOS_OBJS) $(QOS_OBJS) $(THREADPOOL_OBJS) $(NETFILTER_OBJS) $(HWACCEL_OBJS) $(ENGINE_OBJS)
+OBJS = $(CORE_OBJS) $(NETWORK_OBJS) $(CRYPTO_OBJS) $(SECURITY_OBJS) $(PLATFORM_OBJS) $(NF_OBJS) $(UTILS_OBJS) $(SERVICES_OBJS) $(VPN_OBJS) $(IPS_OBJS) $(ANTIVIRUS_OBJS) $(NAT_OBJS) $(DDOS_OBJS) $(QOS_OBJS) $(THREADPOOL_OBJS) $(DPDK_OBJS) $(NETFILTER_OBJS) $(HWACCEL_OBJS) $(ENGINE_OBJS)
 
 # Static library
 LIB = libngfw.a
@@ -171,6 +177,13 @@ $(LIB): $(OBJS)
 test: $(TESTS)
 
 $(TESTS): tests/test_main.c $(OBJS)
+	$(CC) $(CFLAGS) $^ -o $@ -lpthread -lm
+
+# Unit tests
+unit_test: tests/unit_tests
+	./tests/unit_tests
+
+tests/unit_tests: tests/unit_tests.c $(CORE_OBJS) $(NETWORK_OBJS) $(SECURITY_OBJS) $(PLATFORM_OBJS)
 	$(CC) $(CFLAGS) $^ -o $@ -lpthread -lm
 
 # Main executable

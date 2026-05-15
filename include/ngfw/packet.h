@@ -91,6 +91,9 @@ typedef struct packet {
     u32 ifindex_out;
     u64 timestamp;
     u8 direction;
+    bool is_esp;
+    u32 tunnel_id;
+    bool allocated;
 } packet_t;
 
 typedef enum {
