@@ -641,18 +641,6 @@ ngfw_ret_t ips_block_ip(ips_t *ips, u32 ip, u32 duration_sec)
              (ip >> 24) & 0xFF, (ip >> 16) & 0xFF,
              (ip >> 8) & 0xFF, ip & 0xFF, duration_sec);
 
-    /* Sync block to kernel via safe exec (no shell injection) */
-    char ip_str[16];
-    snprintf(ip_str, sizeof(ip_str), "%u.%u.%u.%u",
-             (ip >> 24) & 0xFF, (ip >> 16) & 0xFF,
-             (ip >> 8) & 0xFF, ip & 0xFF);
-
-    char rule_str[64];
-    snprintf(rule_str, sizeof(rule_str), "-s %s -j DROP", ip_str);
-
-    char *argv[] = {"iptables", "-I", "INPUT", "-s", ip_str, "-j", "DROP", NULL};
-    { int r = safe_exec("iptables", argv, 5); (void)r; }
-
     return NGFW_OK;
 }
 
@@ -665,14 +653,6 @@ ngfw_ret_t ips_unblock_ip(ips_t *ips, u32 ip)
     log_info("IPS: Unblocked IP %u.%u.%u.%u",
              (ip >> 24) & 0xFF, (ip >> 16) & 0xFF,
              (ip >> 8) & 0xFF, ip & 0xFF);
-
-    char ip_str[16];
-    snprintf(ip_str, sizeof(ip_str), "%u.%u.%u.%u",
-             (ip >> 24) & 0xFF, (ip >> 16) & 0xFF,
-             (ip >> 8) & 0xFF, ip & 0xFF);
-
-    char *argv[] = {"iptables", "-D", "INPUT", "-s", ip_str, "-j", "DROP", NULL};
-    { int r = safe_exec("iptables", argv, 5); (void)r; }
 
     return NGFW_OK;
 }

@@ -84,5 +84,6 @@ u32 crc32(const u8 *data, u32 len);
 
 bool crypto_has_aesni(void);
 bool crypto_has_avx2(void);
+bool crypto_has_clmul(void);
 
 #endif

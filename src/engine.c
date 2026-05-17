@@ -25,6 +25,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <fcntl.h>
+#include <arpa/inet.h>
 
 struct ngfw_engine {
     ngfw_engine_config_t config;
@@ -534,14 +535,14 @@ ngfw_ret_t ngfw_engine_process_packet(ngfw_engine_t *engine, packet_t *pkt)
 
         tcp_header_t *tcp = packet_get_tcp(pkt);
         if (tcp) {
-            key.src_port = tcp->src_port;
-            key.dst_port = tcp->dst_port;
+            key.src_port = ntohs(tcp->src_port);
+            key.dst_port = ntohs(tcp->dst_port);
         }
 
         udp_header_t *udp = packet_get_udp(pkt);
         if (udp) {
-            key.src_port = udp->src_port;
-            key.dst_port = udp->dst_port;
+            key.src_port = ntohs(udp->src_port);
+            key.dst_port = ntohs(udp->dst_port);
         }
     }
 

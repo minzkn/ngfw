@@ -82,13 +82,34 @@ bool session_expired(session_t *session, u64 now)
 u32 session_key_hash(const void *key, u32 size)
 {
     const session_key_t *k = (const session_key_t *)key;
-    u32 hash = k->src_ip;
-    hash ^= k->dst_ip + 0x9e3779b9 + (hash << 6) + (hash >> 2);
-    hash ^= k->src_port + 0x9e3779b9 + (hash << 6) + (hash >> 2);
-    hash ^= k->dst_port + 0x9e3779b9 + (hash << 6) + (hash >> 2);
-    hash ^= k->protocol + 0x9e3779b9 + (hash << 6) + (hash >> 2);
+    u32 a, b, c;
+    
+    /* Jenkins hash for better distribution */
+    a = 0x9e3779b9;  /* Golden ratio */
+    b = 0x9e3779b9;
+    c = 0x9e3779b9;
+    
+    a += k->src_ip;
+    b += k->dst_ip;
+    c += k->src_port;
+    
+    a += k->dst_port;
+    b += k->protocol;
+    c += size;
+    
+    /* Mix the bits */
+    a -= b; a -= c; a ^= (c >> 13);
+    b -= c; b -= a; b ^= (a << 8);
+    c -= a; c -= b; c ^= (b >> 13);
+    a -= b; a -= c; a ^= (c >> 12);
+    b -= c; b -= a; b ^= (a << 16);
+    c -= a; c -= b; c ^= (b >> 5);
+    a -= b; a -= c; a ^= (c >> 3);
+    b -= c; b -= a; b ^= (a << 10);
+    c -= a; c -= b; c ^= (b >> 15);
+    
     if (size == 0) return 0;
-    return hash % size;
+    return c % size;
 }
 
 bool session_key_equal(const void *a, const void *b)
@@ -197,20 +218,46 @@ void session_table_cleanup(session_table_t *table, u64 now)
 
     table->cleanup_time = now;
 
-    /* Hash table has its own segment locks, no external lock needed */
+    /* Collect expired session keys first to avoid iterator invalidation */
+    session_key_t *expired_keys = NULL;
+    u32 expired_count = 0;
+    u32 expired_capacity = 64;
+    
+    expired_keys = ngfw_malloc(sizeof(session_key_t) * expired_capacity);
+    if (!expired_keys) {
+        return;
+    }
+
     void **iter = hash_iterate_start(table->hash);
     if (!iter) {
+        ngfw_free(expired_keys);
         return;
     }
 
     while (hash_iterate_has_next(iter)) {
         session_t *session = (session_t *)hash_iterate_next(table->hash, iter);
         if (session && session_expired(session, now)) {
-            /* Release our reference from hash table ownership */
-            hash_remove(table->hash, &session->key);
-            /* hash_remove calls session_put, no need to call again */
+            if (expired_count >= expired_capacity) {
+                expired_capacity *= 2;
+                session_key_t *new_keys = ngfw_realloc(expired_keys, 
+                                        sizeof(session_key_t) * expired_capacity);
+                if (!new_keys) {
+                    ngfw_free(iter);
+                    ngfw_free(expired_keys);
+                    return;
+                }
+                expired_keys = new_keys;
+            }
+            expired_keys[expired_count++] = session->key;
         }
     }
 
     ngfw_free(iter);
+
+    /* Now remove expired sessions safely */
+    for (u32 i = 0; i < expired_count; i++) {
+        hash_remove(table->hash, &expired_keys[i]);
+    }
+
+    ngfw_free(expired_keys);
 }

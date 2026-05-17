@@ -130,3 +130,26 @@ void sysinfo_get(system_info_t *info)
     
     info->num_numa_nodes = 1;
 }
+
+/* Generic per-CPU utilities */
+u32 cpu_get_id(void)
+{
+#if defined(__x86_64__) || defined(__i386__)
+    unsigned int eax, ebx, ecx, edx;
+    __asm__ __volatile__("cpuid"
+                         : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx)
+                         : "a"(1), "c"(0));
+    return ebx & 0xFF; /* APIC ID */
+#elif defined(__aarch64__)
+    u64 mpidr;
+    __asm__ __volatile__("mrs %0, mpidr_el1" : "=r"(mpidr));
+    return (mpidr & 0xFF);
+#else
+    return 0;
+#endif
+}
+
+u32 cpu_get_num_cores(void)
+{
+    return (u32)sysconf(_SC_NPROCESSORS_ONLN);
+}

@@ -168,7 +168,7 @@ u8 packet_get_ip_version(packet_t *pkt)
         return (pkt->data[ETH_HLEN] >> 4) & 0x0F;
     }
     if (eth->type == ETH_P_IPV6 && pkt->len >= ETH_HLEN + 1) {
-        return 6;
+        return (pkt->data[ETH_HLEN] >> 4) & 0x0F;
     }
     return 0;
 }

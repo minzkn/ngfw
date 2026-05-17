@@ -62,4 +62,8 @@ void percpu_session_cleanup(percpu_session_mgr_t *mgr);
 /* Get per-CPU stats */
 void percpu_session_get_stats(percpu_session_mgr_t *mgr, u64 *total_lookups, u64 *total_inserts, u64 *total_removes);
 
+/* Generic per-CPU utilities */
+u32 cpu_get_id(void);
+u32 cpu_get_num_cores(void);
+
 #endif

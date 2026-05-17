@@ -19,12 +19,13 @@
 #include <string.h>
 #include <pthread.h>
 
-#define MEM_MAGIC 0xDEADEEF
+#define MEM_MAGIC 0xDEAD
 
 typedef struct mem_header {
-    size_t size;
-    u32 magic;
-} mem_header_t;
+    u32 size;       /* 4 bytes - max 4GB per allocation */
+    u16 magic;      /* 2 bytes */
+    u8 padding[2];  /* 2 bytes - align to 8 bytes */
+} mem_header_t;     /* Total: 8 bytes overhead */
 
 static size_t allocated_memory = 0;
 static size_t peak_memory = 0;
