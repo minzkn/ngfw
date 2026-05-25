@@ -13,7 +13,7 @@
  * GNU General Public License for more details.
  */
 
-#include "ngfw/packet.h"
+#include "ngfw/network/packet.h"
 #include <stddef.h>
 #include <string.h>
 #include <netinet/in.h>

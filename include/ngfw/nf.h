@@ -17,7 +17,7 @@
 #define NGFW_NF_H
 
 #include "types.h"
-#include "packet.h"
+#include "network/packet.h"
 
 typedef enum {
     NF_FAMILY_INET,

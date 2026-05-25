@@ -17,7 +17,7 @@
 #define NGFW_CAPTURE_H
 
 #include "types.h"
-#include "packet.h"
+#include "network/packet.h"
 
 typedef enum {
     CAPTURE_MODE_PROMISCUOUS,

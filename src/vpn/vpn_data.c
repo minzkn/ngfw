@@ -4,11 +4,11 @@
  * Copyright (C) 2024 NGFW Project
  */
 
-#include "ngfw/vpn.h"
+#include "ngfw/security/vpn.h"
 #include "ngfw/memory.h"
 #include "ngfw/log.h"
 #include "ngfw/crypto.h"
-#include "ngfw/packet.h"
+#include "ngfw/network/packet.h"
 #include "ngfw/hash.h"
 #include "ngfw/platform.h"
 #include <string.h>

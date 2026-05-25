@@ -18,7 +18,7 @@
 #include "ngfw/log.h"
 #include "ngfw/list.h"
 #include "ngfw/hash.h"
-#include "ngfw/packet.h"
+#include "ngfw/network/packet.h"
 #include "ngfw/executil.h"
 #include <stdio.h>
 #include <stdlib.h>

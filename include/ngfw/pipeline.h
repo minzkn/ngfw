@@ -17,10 +17,10 @@
 #define NGFW_PIPELINE_H
 
 #include "types.h"
-#include "packet.h"
-#include "session.h"
-#include "filter.h"
-#include "ips.h"
+#include "network/packet.h"
+#include "security/session.h"
+#include "security/filter.h"
+#include "security/ips.h"
 
 typedef enum {
     PIPELINE_STAGE_PRE_ROUTING,

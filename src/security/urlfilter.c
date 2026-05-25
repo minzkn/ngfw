@@ -13,7 +13,7 @@
  * GNU General Public License for more details.
  */
 
-#include "ngfw/urlfilter.h"
+#include "ngfw/security/urlfilter.h"
 #include "ngfw/memory.h"
 #include "ngfw/hash.h"
 #include "ngfw/log.h"
@@ -92,6 +92,12 @@ ngfw_ret_t urlfilter_shutdown(urlfilter_t *filter)
     log_info("URL filter stopped");
     
     return NGFW_OK;
+}
+
+/* Wrapper for engine stop compatibility */
+ngfw_ret_t urlfilter_stop(urlfilter_t *filter)
+{
+    return urlfilter_shutdown(filter);
 }
 
 static void url_rule_destroy(void *key, void *value)
@@ -250,13 +256,21 @@ ngfw_ret_t urlfilter_check_dns(urlfilter_t *filter, const char *domain, url_cate
     return found ? NGFW_OK : NGFW_ERR;
 }
 
-ngfw_ret_t urlfilter_check_domain(urlfilter_t *filter, const char *domain, bool *blocked)
+ngfw_ret_t urlfilter_check_domain(urlfilter_t *filter, const char *domain, url_category_t *category)
 {
-    url_category_t category;
-    ngfw_ret_t ret = urlfilter_check_dns(filter, domain, &category);
+    if (!filter || !domain || !category) return NGFW_ERR_INVALID;
     
-    if (blocked) {
-        *blocked = (ret == NGFW_OK && category != URL_CATEGORY_NONE);
+    *category = URL_CATEGORY_NONE;
+    
+    if (!filter->initialized) return NGFW_ERR;
+    
+    ngfw_ret_t ret = urlfilter_check_dns(filter, domain, category);
+    
+    if (ret == NGFW_OK && *category != URL_CATEGORY_NONE) {
+        filter->stats.requests_blocked++;
+        filter->stats.categories[*category]++;
+    } else {
+        filter->stats.requests_allowed++;
     }
     
     return ret;
@@ -303,7 +317,7 @@ ngfw_ret_t urlfilter_load_blocklist(urlfilter_t *filter, const char *filename)
             *dst = '\0';
         }
         rule.category = URL_CATEGORY_MALWARE;
-        rule.allow = false;
+        rule.block = true;
         rule.enabled = true;
         rule.priority = 50;
         
@@ -388,7 +402,7 @@ ngfw_ret_t urlfilter_load_db(urlfilter_t *filter, const char *filename)
         rule.id = loaded + 1;
         snprintf(rule.pattern, sizeof(rule.pattern), "%.255s", line);
         rule.category = category;
-        rule.allow = false;
+        rule.block = true;
         rule.enabled = true;
         rule.priority = 100;
 

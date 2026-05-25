@@ -6,7 +6,7 @@
 
 #define _GNU_SOURCE
 #include "ngfw/percpu.h"
-#include "ngfw/session.h"
+#include "ngfw/security/session.h"
 #include "ngfw/memory.h"
 #include "ngfw/log.h"
 #include "ngfw/platform.h"

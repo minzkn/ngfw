@@ -4,7 +4,14 @@
 # Copyright (C) 2024 NGFW Project
 # Licensed under the GNU General Public License v2
 #
-# Skip dependency inclusion for clean/distclean targets
+# Layered Architecture Headers:
+#   HAL (Hardware Abstraction Layer) - Hardware access
+#   Core Layer - Data structures, utilities
+#   Network Layer - Protocol handling
+#   Security Layer - Security modules
+#   Services Layer - System services
+#   Application Layer - Main engine
+
 ifeq ($(findstring clean,$(MAKECMDGOALS)),clean)
     CLEANING := 1
 endif
@@ -20,14 +27,14 @@ CC := $(CROSS_COMPILE)$(CC)
 
 CFLAGS += -Wall -Wextra -Wpedantic -std=c99
 CFLAGS += -D_XOPEN_SOURCE=700 -D_POSIX_C_SOURCE=200809L
-CFLAGS += -fno-stack-protector -fomit-frame-pointer -O2
+CFLAGS += -fstack-protector-strong -fomit-frame-pointer -O2
 CFLAGS += -Iinclude -Iinclude/ngfw
 
 # Debug build
 ifdef DEBUG
-    CFLAGS += -g -DDEBUG -O0
+    CFLAGS += -g -DDEBUG -O0 -fstack-protector-all
 else
-    CFLAGS += -DNDEBUG -O3
+    CFLAGS += -DNDEBUG -O3 -fstack-protector-strong
 endif
 
 # Target architecture
@@ -47,92 +54,94 @@ CFLAGS += -DENABLE_IPS=$(ENABLE_IPS) -DENABLE_VPN=$(ENABLE_VPN)
 CFLAGS += -DENABLE_URLFILTER=$(ENABLE_URLFILTER)
 CFLAGS += -DENABLE_ANTIVIRUS=$(ENABLE_ANTIVIRUS) -DENABLE_QOS=$(ENABLE_QOS)
 
-# Source files
+# =============================================================================
+# Source files (existing structure with new layered headers)
+# =============================================================================
+
+# HAL Layer - Hardware Abstraction Layer
+HAL_SRCS = src/hal/hal_memory.c src/hal/hal_cpu.c src/hal/hal_accel.c \
+           src/hal/hal_netif.c src/hal/hal_dpdk.c src/hal/hal_platform.c \
+           src/hal/hal_thread.c
+
+# Core Layer - Data structures, utilities, memory management
 CORE_SRCS = src/core/memory.c src/core/list.c src/core/hash.c src/core/log.c \
             src/core/timer.c src/core/spinlock.c src/core/bitmap.c src/core/percpu.c \
-            src/core/slab_alloc.c
+            src/core/slab_alloc.c src/core/ac_match.c
 
+# Network Layer - Protocol handling and packet processing
 NETWORK_SRCS = src/network/packet.c src/network/interface.c src/network/ip.c \
-                src/network/tcp.c src/network/udp.c src/network/icmp.c
+               src/network/tcp.c src/network/udp.c src/network/icmp.c
 
+# Crypto - Cryptographic primitives
 CRYPTO_SRCS = src/crypto/aes.c src/crypto/sha.c src/crypto/random.c \
-               src/crypto/md5.c src/crypto/crc.c
+              src/crypto/md5.c src/crypto/crc.c
 
-SECURITY_SRCS = src/security/session.c src/security/filter.c src/security/urlfilter.c
+# Security Layer - Security modules (IPS, NAT, VPN, etc.)
+SECURITY_SRCS = src/security/session.c src/security/filter.c src/security/urlfilter.c \
+                src/security/ips.c src/security/vpn.c src/security/nat.c \
+                src/security/ddos.c src/security/antivirus.c src/security/qos.c \
+                src/security/hwaccel.c
 
-PLATFORM_SRCS = src/platform/cpu.c src/platform/thread.c
-
-NF_SRCS = src/nf/nf.c src/nf/nfnetlink.c
-
+# Utils - Utility functions and data structures
 UTILS_SRCS = src/utils/module.c src/utils/mempool.c src/utils/plugin.c \
-              src/utils/ringbuffer.c src/utils/ratelimit.c src/utils/connpool.c \
-              src/utils/bloom.c src/utils/lrucache.c src/utils/skiplist.c \
-              src/utils/asynclog.c src/utils/ipv6.c src/utils/metrics.c \
-              src/utils/strutil.c src/utils/timerwheel.c \
-              src/utils/packet_alloc.c src/utils/protocols.c src/utils/notify.c \
-              src/utils/executil.c src/utils/patmatch.c
+             src/utils/ringbuffer.c src/utils/ratelimit.c src/utils/connpool.c \
+             src/utils/bloom.c src/utils/lrucache.c src/utils/skiplist.c \
+             src/utils/asynclog.c src/utils/ipv6.c src/utils/metrics.c \
+             src/utils/strutil.c src/utils/timerwheel.c \
+             src/utils/packet_alloc.c src/utils/protocols.c src/utils/notify.c \
+             src/utils/executil.c src/utils/patmatch.c
 
-SERVICES_SRCS = src/services/config.c src/services/config_hotreload.c \
-                 src/services/logger.c src/services/event.c src/services/ipc.c \
-                 src/services/monitor.c src/services/auth.c src/services/firmware.c \
-                 src/services/web.c src/services/cli.c src/services/pipeline.c \
-                 src/services/capture.c src/services/logdb.c src/services/snmp.c \
-                 src/services/prometheus.c
+# Services Layer - System services (config, logging, monitoring)
+SERVICES_SRCS = src/services/config.c src/services/logger.c src/services/monitor.c \
+                src/services/web.c src/services/cli.c src/services/snmp.c \
+                src/services/prometheus.c src/services/auth.c src/services/capture.c \
+                src/services/event.c src/services/firmware.c src/services/ipc.c \
+                src/services/logdb.c src/services/pipeline.c \
+                src/services/config_hotreload.c
 
-VPN_SRCS = src/vpn.c src/vpn/vpn_data.c
+# NF - Netfilter kernel integration
+NF_SRCS = src/nf/nf.c src/nf/nfnetlink.c src/netfilter.c
 
-IPS_SRCS = src/ips.c
-
-ANTIVIRUS_SRCS = src/antivirus.c
-
-NAT_SRCS = src/nat.c
-
-DDOS_SRCS = src/ddos.c
-
-QOS_SRCS = src/qos.c
-
-THREADPOOL_SRCS = src/threadpool.c
-
+# DPDK - Data Plane Development Kit (optional)
 DPDK_SRCS = src/dpdk.c
 
-NETFILTER_SRCS = src/netfilter.c
+# Thread pool - Worker thread management
+THREADPOOL_SRCS = src/threadpool.c
 
-HWACCEL_SRCS = src/hwaccel.c
-
+# Engine - Main packet processing engine
 ENGINE_SRCS = src/engine.c
 
-SRC_DIRS = src/core src/network src/crypto src/security src/platform src/nf src/utils src/services src/vpn src/ips src/antivirus src/nat src/ddos src/qos src/threadpool src/netfilter src/hwaccel
+# VPN data - VPN module data structures
+VPN_DATA_SRCS = src/vpn/vpn_data.c
 
-# Object files
+# =============================================================================
+# Object files by layer
+# =============================================================================
+
+HAL_OBJS = $(HAL_SRCS:.c=.o)
 CORE_OBJS = $(CORE_SRCS:.c=.o)
 NETWORK_OBJS = $(NETWORK_SRCS:.c=.o)
 CRYPTO_OBJS = $(CRYPTO_SRCS:.c=.o)
 SECURITY_OBJS = $(SECURITY_SRCS:.c=.o)
-PLATFORM_OBJS = $(PLATFORM_SRCS:.c=.o)
-NF_OBJS = $(NF_SRCS:.c=.o)
 UTILS_OBJS = $(UTILS_SRCS:.c=.o)
 SERVICES_OBJS = $(SERVICES_SRCS:.c=.o)
-
-VPN_OBJS = $(VPN_SRCS:.c=.o)
-IPS_OBJS = $(IPS_SRCS:.c=.o)
-ANTIVIRUS_OBJS = $(ANTIVIRUS_SRCS:.c=.o)
-NAT_OBJS = $(NAT_SRCS:.c=.o)
-DDOS_OBJS = $(DDOS_SRCS:.c=.o)
-QOS_OBJS = $(QOS_SRCS:.c=.o)
-THREADPOOL_OBJS = $(THREADPOOL_SRCS:.c=.o)
+NF_OBJS = $(NF_SRCS:.c=.o)
 DPDK_OBJS = $(DPDK_SRCS:.c=.o)
-NETFILTER_OBJS = $(NETFILTER_SRCS:.c=.o)
-HWACCEL_OBJS = $(HWACCEL_SRCS:.c=.o)
+THREADPOOL_OBJS = $(THREADPOOL_SRCS:.c=.o)
 ENGINE_OBJS = $(ENGINE_SRCS:.c=.o)
+VPN_DATA_OBJS = $(VPN_DATA_SRCS:.c=.o)
 
 # DPDK is optional
 ifeq ($(ENABLE_DPDK),1)
-    DPDK_OBJS = $(DPDK_SRCS:.c=.o)
+    CFLAGS += -DENABLE_DPDK=1
 else
     DPDK_OBJS =
 endif
 
-OBJS = $(CORE_OBJS) $(NETWORK_OBJS) $(CRYPTO_OBJS) $(SECURITY_OBJS) $(PLATFORM_OBJS) $(NF_OBJS) $(UTILS_OBJS) $(SERVICES_OBJS) $(VPN_OBJS) $(IPS_OBJS) $(ANTIVIRUS_OBJS) $(NAT_OBJS) $(DDOS_OBJS) $(QOS_OBJS) $(THREADPOOL_OBJS) $(DPDK_OBJS) $(NETFILTER_OBJS) $(HWACCEL_OBJS) $(ENGINE_OBJS)
+# All objects - organized by layer
+OBJS = $(HAL_OBJS) $(CORE_OBJS) $(NETWORK_OBJS) $(CRYPTO_OBJS) \
+       $(SECURITY_OBJS) $(UTILS_OBJS) $(SERVICES_OBJS) $(NF_OBJS) \
+       $(VPN_DATA_OBJS) $(THREADPOOL_OBJS) $(DPDK_OBJS) $(ENGINE_OBJS)
 
 # Static library
 LIB = libngfw.a
@@ -158,11 +167,9 @@ check_config:
 ENABLE_DPDK ?= 0
 DPDK_DIR ?= $(CURDIR)/dpdk-24.11
 
-ifdef ENABLE_DPDK
 ifeq ($(ENABLE_DPDK),1)
-    CFLAGS += -DENABLE_DPDK=1 -I$(DPDK_DIR)/include
+    CFLAGS += -I$(DPDK_DIR)/include
     LDFLAGS += -L$(DPDK_DIR)/build -lrte_eal -lrte_ethdev -lrte_mbuf -lrte_mempool -lrte_net -lrte_ether -lrte_hash -lrte_ring
-endif
 endif
 
 # Create static library
@@ -183,7 +190,7 @@ $(TESTS): tests/test_main.c $(OBJS)
 unit_test: tests/unit_tests
 	./tests/unit_tests
 
-tests/unit_tests: tests/unit_tests.c $(CORE_OBJS) $(NETWORK_OBJS) $(SECURITY_OBJS) $(PLATFORM_OBJS)
+tests/unit_tests: tests/unit_tests.c $(HAL_OBJS) $(CORE_OBJS) $(NETWORK_OBJS) $(SECURITY_OBJS) $(CRYPTO_OBJS)
 	$(CC) $(CFLAGS) $^ -o $@ -lpthread -lm
 
 # Main executable
@@ -221,6 +228,12 @@ PREFIX ?= /usr/local
 install:
 	install -d $(PREFIX)/lib $(PREFIX)/include/ngfw
 	install -m 644 $(LIB) $(PREFIX)/lib/
+	install -m 644 include/ngfw/hal/*.h $(PREFIX)/include/ngfw/hal/
+	install -m 644 include/ngfw/core/*.h $(PREFIX)/include/ngfw/core/
+	install -m 644 include/ngfw/network/*.h $(PREFIX)/include/ngfw/network/
+	install -m 644 include/ngfw/security/*.h $(PREFIX)/include/ngfw/security/
+	install -m 644 include/ngfw/services/*.h $(PREFIX)/include/ngfw/services/
+	install -m 644 include/ngfw/app/*.h $(PREFIX)/include/ngfw/app/
 	install -m 644 include/ngfw/*.h $(PREFIX)/include/ngfw/
 
 # Dependencies

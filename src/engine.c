@@ -100,6 +100,7 @@ void ngfw_engine_destroy(ngfw_engine_t *engine)
         ngfw_engine_stop(engine);
     }
 
+    /* Free all resources - safe because stop() no longer frees them */
     if (engine->sessions) session_table_destroy(engine->sessions);
     if (engine->filter) filter_destroy(engine->filter);
     if (engine->ips) ips_destroy(engine->ips);
@@ -111,9 +112,7 @@ void ngfw_engine_destroy(ngfw_engine_t *engine)
     if (engine->ddos) ddos_destroy(engine->ddos);
     if (engine->snmp) snmp_destroy(engine->snmp);
     if (engine->prometheus) prometheus_destroy(engine->prometheus);
-    if (engine->netfilter) netfilter_shutdown(engine->netfilter);
     if (engine->netfilter) netfilter_destroy(engine->netfilter);
-    if (engine->hwaccel) hwaccel_shutdown(engine->hwaccel);
     if (engine->hwaccel) hwaccel_destroy(engine->hwaccel);
     if (engine->nf) nf_destroy(engine->nf);
     if (engine->pool) thread_pool_destroy(engine->pool);
@@ -343,6 +342,7 @@ ngfw_ret_t ngfw_engine_stop(ngfw_engine_t *engine)
 
     engine->state = NGFW_STATE_STOPPING;
 
+    /* Stop services only - resources will be freed in ngfw_engine_destroy() */
     if (engine->pool) {
         thread_pool_shutdown(engine->pool);
     }
@@ -363,9 +363,32 @@ ngfw_ret_t ngfw_engine_stop(ngfw_engine_t *engine)
         prometheus_stop(engine->prometheus);
     }
 
-    if (engine->sessions) {
-        session_table_destroy(engine->sessions);
-        engine->sessions = NULL;
+    if (engine->ips) {
+        ips_stop(engine->ips);
+    }
+
+    if (engine->vpn) {
+        vpn_stop(engine->vpn);
+    }
+
+    if (engine->urlfilter) {
+        urlfilter_stop(engine->urlfilter);
+    }
+
+    if (engine->qos) {
+        qos_stop(engine->qos);
+    }
+
+    if (engine->antivirus) {
+        antivirus_stop(engine->antivirus);
+    }
+
+    if (engine->netfilter) {
+        netfilter_shutdown(engine->netfilter);
+    }
+
+    if (engine->hwaccel) {
+        hwaccel_shutdown(engine->hwaccel);
     }
 
     engine->state = NGFW_STATE_STOPPED;

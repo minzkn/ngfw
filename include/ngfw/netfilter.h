@@ -17,8 +17,8 @@
 #define NGFW_NETFILTER_H
 
 #include "types.h"
-#include "filter.h"
-#include "packet.h"
+#include "security/filter.h"
+#include "network/packet.h"
 #include "nf.h"
 
 #define NGFW_CHAIN_MAX 16

@@ -13,12 +13,12 @@
  * GNU General Public License for more details.
  */
 
-#include "ngfw/filter.h"
+#include "ngfw/security/filter.h"
+#include "ngfw/security/session.h"
 #include "ngfw/memory.h"
 #include "ngfw/list.h"
 #include "ngfw/log.h"
-#include "ngfw/packet.h"
-#include "ngfw/session.h"
+#include "ngfw/network/packet.h"
 #include <string.h>
 
 typedef struct filter_rule_internal {

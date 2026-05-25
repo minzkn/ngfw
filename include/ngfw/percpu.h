@@ -1,8 +1,8 @@
 #ifndef NGFW_PERCPU_H
 #define NGFW_PERCPU_H
 
-#include "types.h"
-#include "packet.h"
+#include "ngfw/types.h"
+#include "ngfw/network/packet.h"
 #include <pthread.h>
 
 /* Forward declarations - actual typedefs are in session.h which includes this file */

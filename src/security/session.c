@@ -13,7 +13,7 @@
  * GNU General Public License for more details.
  */
 
-#include "ngfw/session.h"
+#include "ngfw/security/session.h"
 #include "ngfw/hash.h"
 #include "ngfw/memory.h"
 #include "ngfw/log.h"
@@ -22,6 +22,13 @@
 #include <stddef.h>
 
 #define SESSION_TIMEOUT_DEFAULT 300000
+
+/* Session table implementation */
+struct session_table {
+    hash_table_t *hash;
+    u32 max_sessions;
+    u64 cleanup_time;
+};
 
 session_t *session_create(const session_key_t *key)
 {

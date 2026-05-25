@@ -78,10 +78,24 @@ MODULE_VERSION("2.0.0");
 #define NGFW_CMD_FLUSH 4
 #define NGFW_CMD_GET_SESSIONS 5
 
+/* Authentication token for netlink commands */
+#define NGFW_NETLINK_MAGIC 0xNGFW2024
+#define NGFW_NETLINK_VERSION 1
+
+struct ngfw_netlink_msg {
+    u32 magic;
+    u32 version;
+    u32 cmd;
+    u32 pid;
+    u64 timestamp;
+    u8 data[0];
+};
+
 static struct proc_dir_entry *ngfw_proc_dir;
 static struct nf_hook_ops *ngfw_hooks[5];
 static struct sock *nl_sk;
 static spinlock_t ngfw_lock;
+static u64 ngfw_auth_token = 0;  /* Simple token-based auth */
 
 static bool ngfw_enabled = true;
 static u8 ngfw_default_action = NGFW_ACTION_ACCEPT;
@@ -237,6 +251,41 @@ static const struct proc_ops ngfw_stats_proc_ops = {
     .proc_release = single_release,
 };
 
+/* Validate netlink message authentication */
+static bool ngfw_validate_netlink_msg(struct nlmsghdr *nlh)
+{
+    struct ngfw_netlink_msg *msg;
+    
+    if (nlh->nlmsg_len < NLMSG_LENGTH(sizeof(struct ngfw_netlink_msg))) {
+        printk(KERN_WARNING "NGFW: Netlink message too short\n");
+        return false;
+    }
+    
+    msg = nlmsg_data(nlh);
+    
+    /* Check magic number */
+    if (msg->magic != NGFW_NETLINK_MAGIC) {
+        printk(KERN_WARNING "NGFW: Invalid netlink magic (got 0x%x, expected 0x%x)\n",
+               msg->magic, NGFW_NETLINK_MAGIC);
+        return false;
+    }
+    
+    /* Check version */
+    if (msg->version != NGFW_NETLINK_VERSION) {
+        printk(KERN_WARNING "NGFW: Unsupported netlink version (got %u, expected %u)\n",
+               msg->version, NGFW_NETLINK_VERSION);
+        return false;
+    }
+    
+    /* Check token */
+    if (ngfw_auth_token != 0 && msg->timestamp != ngfw_auth_token) {
+        printk(KERN_WARNING "NGFW: Invalid authentication token\n");
+        return false;
+    }
+    
+    return true;
+}
+
 static void ngfw_netlink_receive(struct sk_buff *skb)
 {
     struct nlmsghdr *nlh;
@@ -244,11 +293,21 @@ static void ngfw_netlink_receive(struct sk_buff *skb)
     struct sk_buff *skb_out;
     int msg_size;
     char msg[256];
+    struct ngfw_netlink_msg *req_msg;
     
     nlh = (struct nlmsghdr *)skb->data;
     pid = nlh->nlmsg_pid;
     
-    printk(KERN_INFO "NGFW: Netlink message received\n");
+    /* Validate authentication */
+    if (!ngfw_validate_netlink_msg(nlh)) {
+        printk(KERN_ERR "NGFW: Authentication failed for netlink command\n");
+        return;
+    }
+    
+    req_msg = nlmsg_data(nlh);
+    
+    printk(KERN_INFO "NGFW: Netlink command %u received from PID %d\n", 
+           req_msg->cmd, pid);
     
     memset(msg, 0, sizeof(msg));
     snprintf(msg, sizeof(msg), "Stats: pkts=%lld drop=%lld accept=%lld",
@@ -278,6 +337,10 @@ static int __init ngfw_init(void)
     printk(KERN_INFO "NGFW: Initializing module v%s\n", "2.0.0");
     
     spin_lock_init(&ngfw_lock);
+    
+    /* Generate random auth token */
+    get_random_bytes(&ngfw_auth_token, sizeof(ngfw_auth_token));
+    printk(KERN_INFO "NGFW: Authentication token generated\n");
     
     ops = kzalloc(sizeof(struct nf_hook_ops), GFP_KERNEL);
     if (!ops) {
@@ -364,6 +427,7 @@ static int __init ngfw_init(void)
     
     struct netlink_kernel_cfg cfg = {
         .input = ngfw_netlink_receive,
+        .flags = NL_CFG_F_NONROOT_RECV,  /* Require CAP_NET_ADMIN */
     };
     nl_sk = netlink_kernel_create(&init_net, NGFW_NETLINK_FAMILY, &cfg);
     if (!nl_sk) {
@@ -417,3 +481,7 @@ MODULE_PARM_DESC(ngfw_default_action, "Default action (1=ACCEPT, 2=DROP)");
 
 module_param(ngfw_log_level, byte, 0644);
 MODULE_PARM_DESC(ngfw_log_level, "Log level (0-3)");
+
+/* Export auth token to userspace via module parameter (read-only) */
+module_param(ngfw_auth_token, ulong, 0444);
+MODULE_PARM_DESC(ngfw_auth_token, "Authentication token (read-only)");

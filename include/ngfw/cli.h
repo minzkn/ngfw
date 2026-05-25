@@ -17,9 +17,9 @@
 #define NGFW_CLI_H
 
 #include "types.h"
-#include "filter.h"
-#include "session.h"
-#include "ips.h"
+#include "security/filter.h"
+#include "security/session.h"
+#include "security/ips.h"
 
 typedef enum {
     CLI_CMD_OK,

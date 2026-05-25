@@ -14,9 +14,9 @@
  */
 
 #include "ngfw/urlfilter.h"
-#include "ngfw/memory.h"
-#include "ngfw/hash.h"
-#include "ngfw/log.h"
+#include "ngfw/core/memory.h"
+#include "ngfw/core/hash.h"
+#include "ngfw/core/log.h"
 #include <string.h>
 #include <stdio.h>
 #include <ctype.h>

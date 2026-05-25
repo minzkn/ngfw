@@ -15,11 +15,13 @@
 
 #include "ngfw/memory.h"
 #include "ngfw/log.h"
+#include "ngfw/percpu.h"
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
 
 #define MEM_MAGIC 0xDEAD
+#define NGFW_MEM_PERCPU_COUNT 64
 
 typedef struct mem_header {
     u32 size;       /* 4 bytes - max 4GB per allocation */
@@ -27,10 +29,16 @@ typedef struct mem_header {
     u8 padding[2];  /* 2 bytes - align to 8 bytes */
 } mem_header_t;     /* Total: 8 bytes overhead */
 
-static size_t allocated_memory = 0;
-static size_t peak_memory = 0;
-static bool mem_initialized = false;
+/* Per-CPU memory counters to reduce lock contention */
+typedef struct percpu_mem_counter {
+    size_t allocated;
+    size_t peak;
+    u8 pad[56];  /* Cache line alignment (64 bytes total) */
+} __attribute__((aligned(64))) percpu_mem_counter_t;
+
+static percpu_mem_counter_t percpu_counters[NGFW_MEM_PERCPU_COUNT];
 static pthread_mutex_t mem_lock = PTHREAD_MUTEX_INITIALIZER;
+static bool mem_initialized = false;
 
 static mem_header_t *get_header(void *ptr)
 {
@@ -44,6 +52,13 @@ static void *get_data(mem_header_t *header)
     return (u8 *)header + sizeof(mem_header_t);
 }
 
+/* Get per-CPU counter index using stack pointer hashing */
+static inline u32 get_percpu_index(void)
+{
+    uintptr_t stack_addr = (uintptr_t)&stack_addr;
+    return (u32)(stack_addr >> 8) % NGFW_MEM_PERCPU_COUNT;
+}
+
 void ngfw_mem_init(void)
 {
     pthread_mutex_lock(&mem_lock);
@@ -52,8 +67,7 @@ void ngfw_mem_init(void)
         return;
     }
     mem_initialized = true;
-    allocated_memory = 0;
-    peak_memory = 0;
+    memset(percpu_counters, 0, sizeof(percpu_counters));
     pthread_mutex_unlock(&mem_lock);
 }
 
@@ -66,12 +80,12 @@ void *ngfw_malloc(size_t size)
         header->size = size;
         header->magic = MEM_MAGIC;
         
-        pthread_mutex_lock(&mem_lock);
-        allocated_memory += size;
-        if (allocated_memory > peak_memory) {
-            peak_memory = allocated_memory;
+        /* Update per-CPU counter without global lock */
+        u32 idx = get_percpu_index();
+        percpu_counters[idx].allocated += size;
+        if (percpu_counters[idx].allocated > percpu_counters[idx].peak) {
+            percpu_counters[idx].peak = percpu_counters[idx].allocated;
         }
-        pthread_mutex_unlock(&mem_lock);
         
         return get_data(header);
     }
@@ -89,12 +103,12 @@ void *ngfw_calloc(size_t nmemb, size_t size)
         header->size = total;
         header->magic = MEM_MAGIC;
         
-        pthread_mutex_lock(&mem_lock);
-        allocated_memory += total;
-        if (allocated_memory > peak_memory) {
-            peak_memory = allocated_memory;
+        /* Update per-CPU counter without global lock */
+        u32 idx = get_percpu_index();
+        percpu_counters[idx].allocated += total;
+        if (percpu_counters[idx].allocated > percpu_counters[idx].peak) {
+            percpu_counters[idx].peak = percpu_counters[idx].allocated;
         }
-        pthread_mutex_unlock(&mem_lock);
         
         return get_data(header);
     }
@@ -116,12 +130,12 @@ void *ngfw_realloc(void *ptr, size_t size)
         new_header->size = size;
         new_header->magic = MEM_MAGIC;
         
-        pthread_mutex_lock(&mem_lock);
-        allocated_memory = allocated_memory - old_size + size;
-        if (allocated_memory > peak_memory) {
-            peak_memory = allocated_memory;
+        /* Update per-CPU counter without global lock */
+        u32 idx = get_percpu_index();
+        percpu_counters[idx].allocated = percpu_counters[idx].allocated - old_size + size;
+        if (percpu_counters[idx].allocated > percpu_counters[idx].peak) {
+            percpu_counters[idx].peak = percpu_counters[idx].allocated;
         }
-        pthread_mutex_unlock(&mem_lock);
         
         return get_data(new_header);
     }
@@ -133,9 +147,9 @@ void ngfw_free(void *ptr)
     if (ptr) {
         mem_header_t *header = get_header(ptr);
         if (header && header->magic == MEM_MAGIC) {
-            pthread_mutex_lock(&mem_lock);
-            allocated_memory -= header->size;
-            pthread_mutex_unlock(&mem_lock);
+            /* Update per-CPU counter without global lock */
+            u32 idx = get_percpu_index();
+            percpu_counters[idx].allocated -= header->size;
         }
         free(header);
     }
@@ -154,20 +168,20 @@ void *ngfw_alloc_align(size_t size, size_t align)
 
 size_t ngfw_get_allocated_memory(void)
 {
-    size_t val;
-    pthread_mutex_lock(&mem_lock);
-    val = allocated_memory;
-    pthread_mutex_unlock(&mem_lock);
-    return val;
+    size_t total = 0;
+    for (int i = 0; i < NGFW_MEM_PERCPU_COUNT; i++) {
+        total += percpu_counters[i].allocated;
+    }
+    return total;
 }
 
 size_t ngfw_get_peak_memory(void)
 {
-    size_t val;
-    pthread_mutex_lock(&mem_lock);
-    val = peak_memory;
-    pthread_mutex_unlock(&mem_lock);
-    return val;
+    size_t total = 0;
+    for (int i = 0; i < NGFW_MEM_PERCPU_COUNT; i++) {
+        total += percpu_counters[i].peak;
+    }
+    return total;
 }
 
 void ngfw_memzero(void *ptr, size_t len)
