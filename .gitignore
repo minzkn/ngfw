@@ -1,6 +1,7 @@
-# Autotools generated plumbing. Root-anchored: generated files live at the
-# repository root, and broad patterns would also ignore real source files
-# under subdirectories (e.g. include/ngfw/config.h).
+# Autotools generated plumbing. Root-anchored where a same-named source file
+# could exist in subdirectories (e.g. include/ngfw/config.h); unanchored for
+# artifacts that are always generated (Makefile/Makefile.in appear in every
+# build directory while the source is always Makefile.am).
 /autom4te.cache/
 /aclocal.m4
 /aclocal.m4~
@@ -30,8 +31,8 @@
 .libs/
 .deps/
 .dirstamp
-/Makefile
-/Makefile.in
+Makefile
+Makefile.in
 /include/ngfw/version.h
 /src/ngfw
 /tests/test_platform
