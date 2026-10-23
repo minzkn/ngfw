@@ -1,0 +1,5 @@
+product=ngfw
+model_series=VM,X
+version=0.1.0
+release=0
+vendor=minzkn

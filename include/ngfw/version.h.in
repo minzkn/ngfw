@@ -1,0 +1,9 @@
+/* ngfw - generated version header. Source of truth: the VERSION file
+ * (designs/20-naming-versioning.md). Do not edit; do not hardcode elsewhere. */
+#ifndef NGFW_VERSION_H
+#define NGFW_VERSION_H 1
+
+#define NGFW_PRODUCT "@NGFW_PRODUCT@"
+#define NGFW_VERSION "@PACKAGE_VERSION@"
+
+#endif /* NGFW_VERSION_H */

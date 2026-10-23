@@ -1,0 +1,6 @@
+#!/bin/sh
+# Regenerate the autotools build system on a fresh checkout (R03).
+set -eu
+cd "$(dirname "$0")"
+autoreconf -fiv
+echo "Now run: ./configure && make && make check"

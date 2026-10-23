@@ -1,0 +1,43 @@
+# Autotools generated plumbing. Root-anchored: generated files live at the
+# repository root, and broad patterns would also ignore real source files
+# under subdirectories (e.g. include/ngfw/config.h).
+/autom4te.cache/
+/aclocal.m4
+/aclocal.m4~
+/configure
+/config.h
+/config.h.in
+/config.h.in~
+/config.log
+/config.status
+/config.guess
+/config.sub
+/compile
+/depcomp
+/install-sh
+/missing
+/test-driver
+/ltmain.sh
+/stamp-h1
+/build-aux/
+/m4/
+
+# Build products.
+*.o
+*.a
+*.lo
+*.la
+.libs/
+.deps/
+.dirstamp
+/Makefile
+/Makefile.in
+/include/ngfw/version.h
+/src/ngfw
+/tests/test_platform
+/tests/test_core
+
+# Test harness artifacts.
+*.log
+*.trs
+*~
